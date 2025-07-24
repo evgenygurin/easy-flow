@@ -14,7 +14,7 @@ jobs:
     permissions:
       contents: write  # Разрешение для коммитов
       pull-requests: write
-      issues: read
+      issues: write  # Разрешение для создания issues
     
     steps:
       - name: Checkout repository
