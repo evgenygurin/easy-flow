@@ -24,7 +24,7 @@ class ChatRequest(BaseModel):
     context: Optional[Dict[str, Any]] = Field(None, description="Дополнительный контекст")
     
     @validator('message')
-    def validate_message(cls, v):
+    def validate_message(cls, v: str) -> str:
         """Валидация сообщения."""
         if not v or not v.strip():
             raise ValueError('Сообщение не может быть пустым')
@@ -33,7 +33,7 @@ class ChatRequest(BaseModel):
         return cleaned
     
     @validator('platform')
-    def validate_platform(cls, v):
+    def validate_platform(cls, v: str) -> str:
         """Валидация платформы."""
         allowed_platforms = ['web', 'telegram', 'whatsapp', 'alice', 'vk']
         if v not in allowed_platforms:
@@ -41,7 +41,7 @@ class ChatRequest(BaseModel):
         return v
     
     @validator('user_id')
-    def validate_user_id(cls, v):
+    def validate_user_id(cls, v: str) -> str:
         """Валидация user_id."""
         if not re.match(r'^[a-zA-Z0-9_-]+$', v):
             raise ValueError('user_id должен содержать только буквы, цифры, дефисы и подчеркивания')
@@ -59,7 +59,7 @@ class ChatResponse(BaseModel):
     suggested_actions: Optional[List[str]] = Field(None, description="Предлагаемые действия")
     
     @validator('confidence')
-    def validate_confidence(cls, v):
+    def validate_confidence(cls, v: Optional[float]) -> Optional[float]:
         """Валидация уверенности."""
         if v is not None and (v < 0.0 or v > 1.0):
             raise ValueError('Уверенность должна быть между 0.0 и 1.0')

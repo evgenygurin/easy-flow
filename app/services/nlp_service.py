@@ -15,10 +15,10 @@ logger = structlog.get_logger()
 class NLPService:
     """Сервис для обработки естественного языка."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         # TODO: Инициализация моделей NLP
-        self._intent_patterns = self._load_intent_patterns()
-        self._entity_patterns = self._load_entity_patterns()
+        self._intent_patterns: Dict[str, List[str]] = self._load_intent_patterns()
+        self._entity_patterns: Dict[str, str] = self._load_entity_patterns()
     
     async def process_message(
         self,

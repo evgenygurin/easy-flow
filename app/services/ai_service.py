@@ -6,6 +6,7 @@ import structlog
 from datetime import datetime
 from functools import lru_cache
 import hashlib
+from pydantic import BaseModel, Field
 
 from app.models.conversation import MessageResponse
 from app.core.config import settings
@@ -13,29 +14,22 @@ from app.core.config import settings
 logger = structlog.get_logger()
 
 
-class AIResponse:
+class AIResponse(BaseModel):
     """Ответ от AI сервиса."""
     
-    def __init__(
-        self,
-        response: str,
-        confidence: float = 0.8,
-        suggested_actions: Optional[List[str]] = None,
-        next_questions: Optional[List[str]] = None
-    ):
-        self.response = response
-        self.confidence = confidence
-        self.suggested_actions = suggested_actions or []
-        self.next_questions = next_questions or []
+    response: str = Field(..., description="Ответ AI системы")
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0, description="Уверенность в ответе")
+    suggested_actions: List[str] = Field(default_factory=list, description="Предлагаемые действия")
+    next_questions: List[str] = Field(default_factory=list, description="Следующие вопросы")
 
 
 class AIService:
     """Сервис для работы с AI моделями."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         # TODO: Инициализация OpenAI/YandexGPT клиентов
-        self._templates = self._load_response_templates()
-        self._knowledge_base = self._load_knowledge_base()
+        self._templates: Dict[str, Dict[str, Any]] = self._load_response_templates()
+        self._knowledge_base: List[Dict[str, Any]] = self._load_knowledge_base()
     
     async def generate_response(
         self,
