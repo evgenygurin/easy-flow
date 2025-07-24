@@ -1,0 +1,111 @@
+name: Gemini AI Assistant (Backup)
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to respond to'
+        required: true
+        type: string
+      comment_body:
+        description: 'Comment text for context'
+        required: false
+        type: string
+
+jobs:
+  gemini-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests google-generativeai
+
+      - name: Generate Gemini Response
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          COMMENT_BODY: ${{ github.event.inputs.comment_body }}
+        run: |
+          python3 << 'EOF'
+          import os
+          import requests
+          import google.generativeai as genai
+          import json
+
+          # Configure Gemini
+          genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+          model = genai.GenerativeModel('gemini-2.5-pro')
+
+          # Get issue details
+          repo = os.environ['GITHUB_REPOSITORY']
+          issue_number = os.environ['ISSUE_NUMBER']
+          comment_body = os.environ.get('COMMENT_BODY', '')
+          
+          # Fetch issue from GitHub API
+          headers = {
+              'Authorization': f"Bearer {os.environ['GITHUB_TOKEN']}",
+              'Accept': 'application/vnd.github+json'
+          }
+          
+          issue_url = f"https://api.github.com/repos/{repo}/issues/{issue_number}"
+          response = requests.get(issue_url, headers=headers)
+          
+          if response.status_code != 200:
+              print(f"Error fetching issue: {response.status_code}")
+              exit(1)
+          
+          issue_data = response.json()
+          
+          # Prepare context
+          context = f"""
+          Репозиторий: {repo}
+          Issue #{issue_number}: {issue_data['title']}
+          
+          Описание issue:
+          {issue_data['body']}
+          
+          {"Комментарий: " + comment_body if comment_body else ""}
+          
+          Ты - AI помощник для разработки. Проанализируй issue и дай полезный ответ.
+          Отвечай на русском языке. Если нужно предложить код, добавь примеры.
+          """
+          
+          try:
+              # Generate response
+              ai_response = model.generate_content(context)
+              response_text = ai_response.text
+              
+              # Post comment to issue
+              comment_data = {
+                  'body': f"🤖 **Gemini AI Assistant**\n\n{response_text}\n\n---\n*Powered by Google Gemini 2.5 Pro*"
+              }
+              
+              comment_url = f"https://api.github.com/repos/{repo}/issues/{issue_number}/comments"
+              post_response = requests.post(comment_url, headers=headers, json=comment_data)
+              
+              if post_response.status_code == 201:
+                  print("✅ Successfully posted AI response to issue")
+              else:
+                  print(f"❌ Error posting comment: {post_response.status_code}")
+                  print(post_response.text)
+                  
+          except Exception as e:
+              print(f"❌ Error generating AI response: {str(e)}")
+              exit(1)
+          EOF 

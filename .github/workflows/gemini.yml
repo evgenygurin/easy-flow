@@ -2,17 +2,20 @@ name: Gemini AI Assistant
 
 on:
   issues:
-    types: [opened]
+    types: [opened, edited]
   issue_comment:
-    types: [created]
+    types: [created, edited]
   pull_request:
     types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created]
 
 jobs:
   gemini:
     if: |
       github.repository == 'evgenygurin/easy-flow' && (
         github.event_name == 'pull_request' ||
+        github.event_name == 'pull_request_review_comment' ||
         (github.event_name == 'issues' && contains(github.event.issue.body, '@gemini')) ||
         (github.event_name == 'issue_comment' && (
           contains(github.event.comment.body, '@gemini') ||
@@ -20,18 +23,35 @@ jobs:
         ))
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
       issues: write
+      repository-projects: read
     
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 10
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Validate Gemini API Key
+        run: |
+          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "❌ GEMINI_API_KEY secret is not set"
+            echo "Please add your Gemini API key to repository secrets"
+            exit 1
+          fi
+          echo "✅ GEMINI_API_KEY is configured"
 
       - name: Run Gemini AI Assistant
         uses: google-gemini/gemini-cli-action@main
@@ -39,3 +59,17 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Post-run diagnostics
+        if: always()
+        run: |
+          echo "Workflow completed with status: ${{ job.status }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Event: ${{ github.event_name }}"
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            echo "Issue number: ${{ github.event.issue.number }}"
+          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "Comment on issue: ${{ github.event.issue.number }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "PR number: ${{ github.event.pull_request.number }}"
+          fi
