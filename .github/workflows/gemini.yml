@@ -1,0 +1,41 @@
+name: Gemini AI Assistant
+
+on:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  gemini:
+    if: |
+      github.repository == 'evgenygurin/easy-flow' && (
+        github.event_name == 'pull_request' ||
+        (github.event_name == 'issues' && contains(github.event.issue.body, '@gemini')) ||
+        (github.event_name == 'issue_comment' && (
+          contains(github.event.comment.body, '@gemini') ||
+          contains(github.event.comment.body, '@gemini-cli')
+        ))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 10
+
+      - name: Run Gemini AI Assistant
+        uses: google-gemini/gemini-cli-action@main
+        with:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
