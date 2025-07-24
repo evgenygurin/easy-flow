@@ -23,7 +23,7 @@ logger = structlog.get_logger()
 class ConversationService:
     """Сервис для управления диалогами с клиентами."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.ai_service = AIService()
         # TODO: Подключить к реальной БД
         self._sessions: Dict[str, SessionContext] = {}

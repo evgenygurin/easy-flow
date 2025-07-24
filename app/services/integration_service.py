@@ -1,10 +1,11 @@
 """
 Сервис для интеграций с внешними платформами.
 """
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable, Awaitable
 import uuid
 import structlog
 from datetime import datetime
+from pydantic import BaseModel, Field
 
 from app.api.routes.integration import PlatformInfo
 from app.core.config import settings
@@ -12,37 +13,34 @@ from app.core.config import settings
 logger = structlog.get_logger()
 
 
-class IntegrationResult:
+class IntegrationResult(BaseModel):
     """Результат интеграции."""
     
-    def __init__(self, platform_id: str, status: str = "success"):
-        self.platform_id = platform_id
-        self.status = status
+    platform_id: str = Field(..., description="ID платформы")
+    status: str = Field(default="success", description="Статус интеграции")
 
 
-class WebhookResult:
+class WebhookResult(BaseModel):
     """Результат обработки webhook."""
     
-    def __init__(self, message_id: str, status: str = "processed"):
-        self.message_id = message_id
-        self.status = status
+    message_id: str = Field(..., description="ID сообщения")
+    status: str = Field(default="processed", description="Статус обработки")
 
 
-class SyncResult:
+class SyncResult(BaseModel):
     """Результат синхронизации."""
     
-    def __init__(self, records_updated: int, sync_time: datetime):
-        self.records_updated = records_updated
-        self.sync_time = sync_time
+    records_updated: int = Field(..., description="Количество обновленных записей")
+    sync_time: datetime = Field(..., description="Время синхронизации")
 
 
 class IntegrationService:
     """Сервис для управления интеграциями с внешними платформами."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         # TODO: Подключить к реальной БД
         self._user_integrations: Dict[str, List[PlatformInfo]] = {}
-        self._webhook_handlers = self._setup_webhook_handlers()
+        self._webhook_handlers: Dict[str, Callable[[Dict[str, Any]], Awaitable[str]]] = self._setup_webhook_handlers()
     
     async def get_user_integrations(self, user_id: str) -> List[PlatformInfo]:
         """Получить список подключенных интеграций для пользователя."""
@@ -231,7 +229,7 @@ class IntegrationService:
         
         # TODO: Добавить реальную проверку учетных данных через API платформ
     
-    def _setup_webhook_handlers(self) -> Dict[str, callable]:
+    def _setup_webhook_handlers(self) -> Dict[str, Callable[[Dict[str, Any]], Awaitable[str]]]:
         """Настройка обработчиков webhook для каждой платформы."""
         return {
             "wildberries": self._handle_wildberries_webhook,
