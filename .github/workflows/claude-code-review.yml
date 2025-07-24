@@ -3,11 +3,20 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  issue_comment:
+    types: [created]
+  issues:
+    types: [opened]
 
 jobs:
   claude-review:
-    # Добавлена проверка репозитория для безопасности
-    if: github.repository == 'evgenygurin/easy-flow'
+    # Добавлена проверка репозитория для безопасности и условия запуска
+    if: |
+      github.repository == 'evgenygurin/easy-flow' && (
+        github.event_name == 'pull_request' ||
+        (github.event_name == 'issues' && contains(github.event.issue.body, '@claude')) ||
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 10  # Добавлен timeout для предотвращения зависших задач
     
@@ -34,8 +43,8 @@ jobs:
           # Включен sticky comment для предотвращения спама
           use_sticky_comment: true
           
-          # Ограничение инструментов для безопасности
-          allowed_tools: "Bash(pytest),Bash(uvicorn main:app --reload),Read,Grep,Glob,Edit"
+          # Разрешенные инструменты для работы с кодом
+          allowed_tools: "Bash(pip install),Bash(black),Bash(mypy),Bash(flake8),Bash(pytest),Bash(uvicorn main:app --reload),Read,Grep,Glob,Edit,MultiEdit,Write"
           
           # Системный промпт для русскоязычного проекта
           direct_prompt: |
