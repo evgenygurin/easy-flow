@@ -15,7 +15,6 @@ jobs:
       contents: write  # Разрешение для коммитов
       pull-requests: write
       issues: read
-      id-token: write
     
     steps:
       - name: Checkout repository
