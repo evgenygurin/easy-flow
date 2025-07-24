@@ -1,4 +1,4 @@
-name: Claude Code
+name: Ассистент Claude
 
 on:
   issue_comment:
@@ -12,7 +12,6 @@ on:
 
 jobs:
   claude:
-    # Добавлена проверка репозитория для безопасности
     if: |
       github.repository == 'evgenygurin/easy-flow' && (
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
@@ -21,60 +20,35 @@ jobs:
         (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 15  # Добавлен timeout для предотвращения зависших задач
+    timeout-minutes: 15
     
     permissions:
-      contents: write  # Разрешение для коммитов
+      contents: write
       pull-requests: write
       issues: write
       id-token: write
       actions: read
       
     steps:
-      - name: Checkout repository
+      - name: Клонирование репозитория
         uses: actions/checkout@v4
         with:
-          # Увеличен fetch-depth для лучшего анализа истории git
           fetch-depth: 10
 
-      - name: Run Claude Code
+      - name: Запуск ассистента Claude
         id: claude
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
-          # Ограничение инструментов для безопасности
           allowed_tools: "Bash(pytest),Bash(uvicorn main:app --reload),Bash(pip install -r requirements.txt),Read,Write,Edit,Grep,Glob"
           
-          # Кастомные инструкции для Python/FastAPI проекта
           custom_instructions: |
-            Ты работаешь с Python/FastAPI проектом. Следуй этим правилам:
-            - Используй Black для форматирования кода
-            - Следуй PEP 8 стандартам
-            - Добавляй type hints ко всем функциям
-            - Используй pytest для тестирования
-            - Отвечай на русском языке
-            - Всегда запускай тесты после изменений в коде
-          
-          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
-          # model: "claude-opus-4-20250514"
-          
-          # Optional: Customize the trigger phrase (default: @claude)
-          # trigger_phrase: "/claude"
-          
-          # Optional: Trigger when specific user is assigned to an issue
-          # assignee_trigger: "claude-bot"
-          
-          # Optional: Allow Claude to run specific commands
-          # allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test:*),Bash(npm run lint:*)"
-          
-          # Optional: Add custom instructions for Claude to customize its behavior for your project
-          # custom_instructions: |
-          #   Follow our coding standards
-          #   Ensure all new code has tests
-          #   Use TypeScript for new files
-          
-          # Optional: Custom environment variables for Claude
-          # claude_env: |
-          #   NODE_ENV: test
+            Ты работаешь с проектом на Python/FastAPI. Следуй этим правилам:
+            - Используй `Black` для форматирования кода.
+            - Соблюдай стандарты PEP 8.
+            - Добавляй аннотации типов ко всем функциям.
+            - Используй `pytest` для тестирования.
+            - Отвечай на русском языке.
+            - Всегда запускай тесты после внесения изменений в код.
 

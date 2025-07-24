@@ -1,4 +1,4 @@
-name: Claude Code Review
+name: Code Review от Claude
 
 on:
   pull_request:
@@ -10,7 +10,6 @@ on:
 
 jobs:
   claude-review:
-    # Добавлена проверка репозитория для безопасности и условия запуска
     if: |
       github.repository == 'evgenygurin/easy-flow' && (
         github.event_name == 'pull_request' ||
@@ -18,21 +17,20 @@ jobs:
         (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude'))
       )
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Добавлен timeout для предотвращения зависших задач
+    timeout-minutes: 10
     
     permissions:
-      contents: write  # Разрешение для коммитов
+      contents: write
       pull-requests: write
-      issues: write  # Разрешение для создания issues
+      issues: write
     
     steps:
-      - name: Checkout repository
+      - name: Клонирование репозитория
         uses: actions/checkout@v4
         with:
-          # Увеличен fetch-depth для лучшего анализа истории git
           fetch-depth: 10
 
-      - name: Run Claude Code Review
+      - name: Запуск Code Review от Claude
         id: claude-review
         uses: anthropics/claude-code-action@beta
 
@@ -40,45 +38,20 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-          # Включен sticky comment для предотвращения спама
           use_sticky_comment: true
           
-          # Разрешенные инструменты для работы с кодом
           allowed_tools: "Bash(pip install),Bash(black),Bash(mypy),Bash(flake8),Bash(pytest),Bash(uvicorn main:app --reload),Read,Grep,Glob,Edit,MultiEdit,Write"
           
-          # Системный промпт для русскоязычного проекта
           direct_prompt: |
-            Ты - опытный разработчик, проводящий code review для Python/FastAPI проекта. 
-            Проанализируй этот pull request и дай обратную связь по:
+            Ты — опытный разработчик, проводящий code review для проекта на Python/FastAPI. 
+            Проанализируй этот pull request и дай обратную связь по следующим пунктам:
             
-            - Качеству кода и соответствию стандартам Python/FastAPI
-            - Потенциальным багам и проблемам безопасности
-            - Производительности и оптимизации
-            - Соответствию архитектуре проекта
-            - Покрытию тестами
+            - Качество кода и соответствие стандартам Python/FastAPI.
+            - Потенциальные баги и уязвимости в безопасности.
+            - Производительность и возможности для оптимизации.
+            - Соответствие архитектуре проекта.
+            - Полнота и качество тестов.
             
-            Отвечай на русском языке, будь конструктивным и дружелюбным.
-            Используй pytest для запуска тестов если нужно.
-          
-          # Optional: Customize review based on file types
-          # direct_prompt: |
-          #   Review this PR focusing on:
-          #   - For TypeScript files: Type safety and proper interface usage
-          #   - For API endpoints: Security, input validation, and error handling
-          #   - For React components: Performance, accessibility, and best practices
-          #   - For tests: Coverage, edge cases, and test quality
-          
-          # Optional: Different prompts for different authors
-          # direct_prompt: |
-          #   ${{ github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR' && 
-          #   'Welcome! Please review this PR from a first-time contributor. Be encouraging and provide detailed explanations for any suggestions.' ||
-          #   'Please provide a thorough code review focusing on our coding standards and best practices.' }}
-          
-          # Optional: Add specific tools for running tests or linting
-          # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
-          
-          # Optional: Skip review for certain conditions
-          # if: |
-          #   !contains(github.event.pull_request.title, '[skip-review]') &&
-          #   !contains(github.event.pull_request.title, '[WIP]')
+            Отвечай на русском языке. Будь конструктивным и дружелюбным.
+            При необходимости используй `pytest` для запуска тестов.
 

@@ -1,4 +1,4 @@
-name: Gemini AI Assistant
+name: AI-ассистент Gemini
 
 on:
   issues:
@@ -32,43 +32,43 @@ jobs:
       repository-projects: read
     
     steps:
-      - name: Checkout repository
+      - name: Клонирование репозитория
         uses: actions/checkout@v4
         with:
           fetch-depth: 10
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Node.js
+      - name: Настройка Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Validate Gemini API Key
+      - name: Проверка ключа Gemini API
         run: |
           if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
-            echo "❌ GEMINI_API_KEY secret is not set"
-            echo "Please add your Gemini API key to repository secrets"
+            echo "❌ Секрет GEMINI_API_KEY не установлен"
+            echo "Пожалуйста, добавьте ваш ключ Gemini API в секреты репозитория"
             exit 1
           fi
-          echo "✅ GEMINI_API_KEY is configured"
+          echo "✅ Ключ GEMINI_API_KEY настроен"
 
-      - name: Run Gemini AI Assistant
+      - name: Запуск AI-ассистента Gemini
         uses: google-gemini/gemini-cli-action@main
         with:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
-      - name: Post-run diagnostics
+      - name: Диагностика после запуска
         if: always()
         run: |
-          echo "Workflow completed with status: ${{ job.status }}"
-          echo "Repository: ${{ github.repository }}"
-          echo "Event: ${{ github.event_name }}"
+          echo "Рабочий процесс завершен со статусом: ${{ job.status }}"
+          echo "Репозиторий: ${{ github.repository }}"
+          echo "Событие: ${{ github.event_name }}"
           if [ "${{ github.event_name }}" = "issues" ]; then
-            echo "Issue number: ${{ github.event.issue.number }}"
+            echo "Номер issue: ${{ github.event.issue.number }}"
           elif [ "${{ github.event_name }}" = "issue_comment" ]; then
-            echo "Comment on issue: ${{ github.event.issue.number }}"
+            echo "Комментарий в issue: ${{ github.event.issue.number }}"
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "PR number: ${{ github.event.pull_request.number }}"
+            echo "Номер PR: ${{ github.event.pull_request.number }}"
           fi

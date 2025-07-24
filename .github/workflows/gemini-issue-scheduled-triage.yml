@@ -1,0 +1,86 @@
+name: 📋 Сортировка issue по расписанию (Gemini)
+
+on:
+  schedule:
+    - cron: '0 * * * *' # Запускается каждый час
+  workflow_dispatch: {}
+
+jobs:
+  triage-issues:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+    steps:
+      - name: Генерация токена GitHub App
+        id: generate_token
+        if: ${{ vars.APP_ID }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+
+      - name: Клонирование репозитория
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Поиск неотсортированных issue
+        id: find_issues
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🔍 Поиск issue без меток..."
+          NO_LABEL_ISSUES=$(gh issue list --repo ${{ github.repository }} --search "is:open is:issue no:label" --json number,title,body)
+
+          echo "🏷️ Поиск issue, требующих сортировки..."
+          NEED_TRIAGE_ISSUES=$(gh issue list --repo ${{ github.repository }} --search "is:open is:issue label:\"status/needs-triage\"" --json number,title,body)
+
+          echo "🔄 Объединение и удаление дубликатов issue..."
+          ISSUES=$(echo "$NO_LABEL_ISSUES" "$NEED_TRIAGE_ISSUES" | jq -c -s 'add | unique_by(.number)')
+
+          echo "📝 Установка вывода для GitHub Actions..."
+          echo "issues_to_triage=$ISSUES" >> "$GITHUB_OUTPUT"
+
+          echo "✅ Найдено $(echo "$ISSUES" | jq 'length') issue для сортировки! 🎯"
+
+      - name: Запуск сортировки issue с помощью Gemini
+        if: steps.find_issues.outputs.issues_to_triage != '[]'
+        uses: google-gemini/gemini-cli-action@main
+        env:
+          GITHUB_TOKEN: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          ISSUES_TO_TRIAGE: ${{ steps.find_issues.outputs.issues_to_triage }}
+          REPOSITORY: ${{ github.repository }}
+        with:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OTLP_GCP_WIF_PROVIDER: ${{ secrets.OTLP_GCP_WIF_PROVIDER }}
+          OTLP_GOOGLE_CLOUD_PROJECT: ${{ secrets.OTLP_GOOGLE_CLOUD_PROJECT }}
+          settings_json: |
+            {
+              "coreTools": [
+                "run_shell_command(echo)",
+                "run_shell_command(gh label list)",
+                "run_shell_command(gh issue edit)",
+                "run_shell_command(gh issue list)"
+              ],
+              "telemetry": {
+                "enabled": true,
+                "target": "gcp"
+              },
+              "sandbox": false
+            }
+          prompt: |
+            Ты — ассистент по сортировке issue. Анализируй задачи и применяй соответствующие метки.
+            
+            Шаги:
+            1. Выполни: `gh label list`
+            2. Проверь переменную окружения: $ISSUES_TO_TRIAGE (JSON-массив с задачами)
+            3. Для каждой issue примени метки: `gh issue edit ISSUE_NUMBER --add-label "метка1,метка2"`. Если возможно, установи метки, соответствующие шаблонам `kind/*`, `area/*` и `priority/*`.
+            4. Для каждой issue, если присутствует метка `status/needs-triage`, удали её с помощью команды: `gh issue edit ISSUE_NUMBER --remove-label "status/needs-triage"`
+            
+            Правила:
+            - Используй только существующие в репозитории метки.
+            - Не добавляй комментарии.
+            - Сортируй каждую issue независимо.
