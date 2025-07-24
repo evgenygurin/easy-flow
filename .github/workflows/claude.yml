@@ -12,23 +12,30 @@ on:
 
 jobs:
   claude:
+    # Добавлена проверка репозитория для безопасности
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
-      (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      github.repository == 'evgenygurin/easy-flow' && (
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
+        (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
+      )
     runs-on: ubuntu-latest
+    timeout-minutes: 15  # Добавлен timeout для предотвращения зависших задач
+    
     permissions:
-      contents: read
-      pull-requests: read
-      issues: read
+      contents: write  # Разрешение для коммитов
+      pull-requests: write
+      issues: write
       id-token: write
-      actions: read # Required for Claude to read CI results on PRs
+      actions: read
+      
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          # Увеличен fetch-depth для лучшего анализа истории git
+          fetch-depth: 10
 
       - name: Run Claude Code
         id: claude
@@ -36,9 +43,18 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
-          # This is an optional setting that allows Claude to read CI results on PRs
-          additional_permissions: |
-            actions: read
+          # Ограничение инструментов для безопасности
+          allowed_tools: "Bash(pytest),Bash(uvicorn main:app --reload),Bash(pip install -r requirements.txt),Read,Write,Edit,Grep,Glob"
+          
+          # Кастомные инструкции для Python/FastAPI проекта
+          custom_instructions: |
+            Ты работаешь с Python/FastAPI проектом. Следуй этим правилам:
+            - Используй Black для форматирования кода
+            - Следуй PEP 8 стандартам
+            - Добавляй type hints ко всем функциям
+            - Используй pytest для тестирования
+            - Отвечай на русском языке
+            - Всегда запускай тесты после изменений в коде
           
           # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
           # model: "claude-opus-4-20250514"

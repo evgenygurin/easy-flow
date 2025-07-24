@@ -2,26 +2,18 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    types: [opened, synchronize, reopened]
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-    
+    # Добавлена проверка репозитория для безопасности
+    if: github.repository == 'evgenygurin/easy-flow'
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Добавлен timeout для предотвращения зависших задач
+    
     permissions:
-      contents: read
-      pull-requests: read
+      contents: write  # Разрешение для коммитов
+      pull-requests: write
       issues: read
       id-token: write
     
@@ -29,30 +21,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          # Увеличен fetch-depth для лучшего анализа истории git
+          fetch-depth: 10
 
       - name: Run Claude Code Review
         id: claude-review
         uses: anthropics/claude-code-action@beta
+
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
-          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
-          # model: "claude-opus-4-20250514"
+          # Включен sticky comment для предотвращения спама
+          use_sticky_comment: true
           
-          # Direct prompt for automated review (no @claude mention needed)
+          # Ограничение инструментов для безопасности
+          allowed_tools: "Bash(pytest),Bash(uvicorn main:app --reload),Read,Grep,Glob,Edit"
+          
+          # Системный промпт для русскоязычного проекта
           direct_prompt: |
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
+            Ты - опытный разработчик, проводящий code review для Python/FastAPI проекта. 
+            Проанализируй этот pull request и дай обратную связь по:
             
-            Be constructive and helpful in your feedback.
-
-          # Optional: Use sticky comments to make Claude reuse the same comment on subsequent pushes to the same PR
-          # use_sticky_comment: true
+            - Качеству кода и соответствию стандартам Python/FastAPI
+            - Потенциальным багам и проблемам безопасности
+            - Производительности и оптимизации
+            - Соответствию архитектуре проекта
+            - Покрытию тестами
+            
+            Отвечай на русском языке, будь конструктивным и дружелюбным.
+            Используй pytest для запуска тестов если нужно.
           
           # Optional: Customize review based on file types
           # direct_prompt: |
