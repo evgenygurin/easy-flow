@@ -2,6 +2,7 @@
 Конфигурация приложения для AI платформы поддержки клиентов.
 """
 from pydantic_settings import BaseSettings
+from pydantic import Field
 from typing import List, Optional
 import os
 
@@ -16,7 +17,7 @@ class Settings(BaseSettings):
     
     # API настройки
     API_V1_STR: str = "/api/v1"
-    ALLOWED_HOSTS: List[str] = ["*"]
+    ALLOWED_HOSTS: List[str] = Field(default=["localhost", "127.0.0.1"], env="ALLOWED_HOSTS")
     
     # База данных
     DATABASE_URL: Optional[str] = None
@@ -32,7 +33,7 @@ class Settings(BaseSettings):
     ALICE_OAUTH_TOKEN: Optional[str] = None
     
     # Безопасность
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = Field(..., env="SECRET_KEY", description="Секретный ключ для JWT токенов")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
     # Интеграции e-commerce

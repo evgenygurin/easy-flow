@@ -4,6 +4,8 @@ AI сервис для генерации ответов клиентам.
 from typing import Optional, Dict, Any, List
 import structlog
 from datetime import datetime
+from functools import lru_cache
+import hashlib
 
 from app.models.conversation import MessageResponse
 from app.core.config import settings
@@ -121,6 +123,17 @@ class AIService:
         
         return response
     
+    @lru_cache(maxsize=128)
+    def _generate_template_response_cached(
+        self, 
+        intent: str, 
+        entities_hash: str
+    ) -> str:
+        """Кэшированная версия генерации ответа на основе шаблона."""
+        # Восстанавливаем entities из хэша (упрощенная реализация)
+        # В реальной реализации можно использовать более сложную систему кэширования
+        return self._generate_template_response(intent, None)
+    
     def _search_knowledge_base(self, message: str, intent: Optional[str]) -> Optional[str]:
         """Поиск ответа в базе знаний."""
         message_lower = message.lower()
@@ -132,6 +145,11 @@ class AIService:
                     return kb_item["response"]
         
         return None
+    
+    @lru_cache(maxsize=256)
+    def _search_knowledge_base_cached(self, message: str, intent: Optional[str]) -> Optional[str]:
+        """Кэшированная версия поиска в базе знаний."""
+        return self._search_knowledge_base(message, intent)
     
     async def _generate_llm_response(
         self,

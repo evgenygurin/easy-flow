@@ -1,7 +1,7 @@
 """
 Сервис для обработки естественного языка (NLP).
 """
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import re
 import structlog
 from datetime import datetime
@@ -111,7 +111,7 @@ class NLPService:
         else:
             return "ru"  # по умолчанию русский
     
-    def _classify_intent(self, text: str) -> tuple[Optional[str], float]:
+    def _classify_intent(self, text: str) -> Tuple[Optional[str], float]:
         """Классификация намерений."""
         max_confidence = 0.0
         detected_intent = None

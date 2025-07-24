@@ -9,6 +9,8 @@ import structlog
 
 from app.core.config import settings
 from app.api.routes import conversation, health, integration
+from app.services.conversation_service import ConversationService
+from app.services.nlp_service import NLPService
 
 logger = structlog.get_logger()
 
@@ -30,6 +32,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Dependency Injection factories
+def get_conversation_service() -> ConversationService:
+    """Factory для ConversationService."""
+    return ConversationService()
+
+def get_nlp_service() -> NLPService:
+    """Factory для NLPService."""
+    return NLPService()
+
 # Подключение роутеров
 app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(conversation.router, prefix="/api/v1/conversation", tags=["conversation"])
@@ -39,6 +50,10 @@ app.include_router(integration.router, prefix="/api/v1/integration", tags=["inte
 async def startup_event():
     """Инициализация при запуске приложения."""
     logger.info("Запуск AI Customer Support Platform")
+    
+    # Настройка dependency injection
+    app.dependency_overrides[ConversationService] = get_conversation_service
+    app.dependency_overrides[NLPService] = get_nlp_service
 
 @app.on_event("shutdown") 
 async def shutdown_event():
