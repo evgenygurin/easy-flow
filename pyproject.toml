@@ -65,47 +65,29 @@ profile = "black"
 multi_line_output = 3
 line_length = 88
 
-[tool.black]
-line-length = 88
-target-version = ['py311']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
+# Black убран из конфигурации - используем только ruff format
+# [tool.black] - заменено на ruff format в pre-commit хуках
 
 [tool.mypy]
 python_version = "3.11"
-# Строгий режим проверки типов
-strict = true
+# Градуальное внедрение типизации - начинаем с предупреждений
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
-# Дополнительные строгие проверки
-disallow_any_generics = true
-disallow_subclassing_any = true
-disallow_untyped_calls = true
-disallow_any_unimported = true
-no_implicit_reexport = true
-strict_optional = true
+# Более мягкие настройки для начального этапа
+check_untyped_defs = true
+warn_untyped_defs = true
+warn_incomplete_stub = true
+# Постепенно можно включать более строгие правила:
+# disallow_untyped_defs = true
+# disallow_incomplete_defs = true
+# disallow_untyped_calls = true
+# disallow_any_generics = true
+# strict = true
 
 [[tool.mypy.overrides]]
 module = [

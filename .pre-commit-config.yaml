@@ -1,20 +1,13 @@
 repos:
   # Ruff для линтинга и форматирования
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.15
+    rev: v0.6.9
     hooks:
       - id: ruff
         name: ruff (lint)
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
         name: ruff (format)
-
-  # Black для форматирования (после ruff для совместимости)
-  - repo: https://github.com/psf/black
-    rev: 23.11.0
-    hooks:
-      - id: black
-        language_version: python3.11
 
   # MyPy для проверки типов
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -58,7 +51,7 @@ repos:
     hooks:
       - id: bandit
         name: Проверка безопасности
-        args: ['-r', 'app/', '--format', 'custom', '--skip', 'B101,B601']
+        args: ['-r', 'app/', '--format', 'custom', '--skip', 'B101']
 
   # Проверка зависимостей
   - repo: https://github.com/PyCQA/safety

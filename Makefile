@@ -27,20 +27,29 @@ install-dev: ## Установить зависимости для разраб�
 format: ## Форматировать код
 	@echo "$(BLUE)Форматирование кода...$(NC)"
 	ruff format app/ tests/
-	black app/ tests/
 	@echo "$(GREEN)✓ Код отформатирован$(NC)"
 
 lint: ## Проверить код линтерами
 	@echo "$(BLUE)Проверка кода линтерами...$(NC)"
 	ruff check app/ tests/
-	black --check app/ tests/
+	ruff format --check app/ tests/
 	mypy app/ --config-file=pyproject.toml
 	@echo "$(GREEN)✓ Линтинг завершен$(NC)"
 
 security: ## Проверка безопасности
 	@echo "$(BLUE)Проверка безопасности...$(NC)"
-	bandit -r app/ --format json --output bandit-report.json || true
-	safety check --json --output safety-report.json || true
+	@echo "$(YELLOW)Запуск Bandit...$(NC)"
+	@if bandit -r app/ --format json --output bandit-report.json; then \
+		echo "$(GREEN)✓ Bandit: проблем не найдено$(NC)"; \
+	else \
+		echo "$(RED)⚠ Bandit: найдены проблемы безопасности, проверьте bandit-report.json$(NC)"; \
+	fi
+	@echo "$(YELLOW)Запуск Safety...$(NC)"
+	@if safety check --json --output safety-report.json; then \
+		echo "$(GREEN)✓ Safety: уязвимостей не найдено$(NC)"; \
+	else \
+		echo "$(RED)⚠ Safety: найдены уязвимости, проверьте safety-report.json$(NC)"; \
+	fi
 	@echo "$(GREEN)✓ Проверка безопасности завершена$(NC)"
 	@echo "$(YELLOW)Отчеты сохранены в bandit-report.json и safety-report.json$(NC)"
 
