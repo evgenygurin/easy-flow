@@ -1,0 +1,77 @@
+repos:
+  # Ruff для линтинга и форматирования
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        name: ruff (lint)
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+        name: ruff (format)
+
+  # MyPy для проверки типов
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.7.1
+    hooks:
+      - id: mypy
+        additional_dependencies: 
+          - types-all
+          - pydantic
+          - fastapi
+          - sqlalchemy
+        args: [--config-file=pyproject.toml]
+
+  # Стандартные хуки pre-commit
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        name: Удаление пробелов в конце строк
+      - id: end-of-file-fixer
+        name: Добавление новой строки в конце файла
+      - id: check-yaml
+        name: Проверка YAML файлов
+      - id: check-added-large-files
+        name: Предотвращение добавления больших файлов
+        args: ['--maxkb=1000']
+      - id: check-toml
+        name: Проверка TOML файлов
+      - id: check-json
+        name: Проверка JSON файлов
+      - id: check-merge-conflict
+        name: Проверка конфликтов слияния
+      - id: debug-statements
+        name: Проверка debug statements
+      - id: check-docstring-first
+        name: Проверка порядка docstring
+
+  # Проверка безопасности с bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        name: Проверка безопасности
+        args: ['-r', 'app/', '--format', 'custom', '--skip', 'B101']
+
+  # Проверка зависимостей
+  - repo: https://github.com/PyCQA/safety
+    rev: 2.3.5
+    hooks:
+      - id: safety
+        name: Проверка уязвимостей в зависимостях
+        args: [--json]
+
+default_language_version:
+  python: python3.11
+
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false
