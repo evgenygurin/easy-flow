@@ -40,6 +40,7 @@ jobs:
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
           allowed_tools: "Bash(pytest),Bash(uvicorn main:app --reload),Bash(pip install -r requirements.txt),Read,Write,Edit,Grep,Glob"
           
