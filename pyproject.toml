@@ -1,20 +1,40 @@
-[tool.black]
+[tool.ruff]
 line-length = 88
-target-version = ['py311']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
+target-version = "py311"
+select = ["E", "F", "I", "N", "W", "UP", "B", "A", "C4", "PIE", "T20", "RET", "SIM", "ARG", "ERA", "PLR", "PLW", "PLR0913"]
+ignore = ["E501", "PLR0913"]
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.isort]
+known-first-party = ["app"]
 
 [tool.mypy]
 python_version = "3.11"
