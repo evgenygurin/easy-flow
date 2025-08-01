@@ -30,7 +30,7 @@ jobs:
     name: Автоматическая сортировка
     if: >
       github.event_name == 'issues' ||
-      github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'triage' ||
+      github.event_name == 'workflow_dispatch' && inputs.action == 'triage' ||
       (github.event_name == 'issue_comment' && 
        contains(github.event.comment.body, '@gemini-cli /triage') &&
        (github.event.comment.author_association == 'OWNER' ||
@@ -42,11 +42,14 @@ jobs:
       contents: read
       id-token: write
     concurrency:
-      group: ${{ github.workflow }}-triage-${{ github.event.issue.number || github.event.inputs.issue_number }}
+      group: ${{ github.workflow }}-triage-${{ github.event.issue.number || inputs.issue_number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     
     steps:
+      - name: Клонирование репозитория
+        uses: actions/checkout@v4
+
       - name: Настройка GitHub токена
         id: auth
         uses: ./.github/actions/setup-github-app
@@ -55,16 +58,11 @@ jobs:
           private_key: ${{ secrets.PRIVATE_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Настройка репозитория
-        uses: ./.github/actions/setup-repository
-        with:
-          token: ${{ steps.auth.outputs.token }}
-
       - name: Установка контекста issue
         id: set_issue_context
         run: |
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "issue_number=${{ github.event.inputs.issue_number }}" >> $GITHUB_OUTPUT
+            echo "issue_number=${{ inputs.issue_number }}" >> $GITHUB_OUTPUT
           else
             echo "issue_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
           fi
@@ -135,6 +133,9 @@ jobs:
       issues: write
       
     steps:
+      - name: Клонирование репозитория
+        uses: actions/checkout@v4
+
       - name: Настройка GitHub токена
         id: auth
         uses: ./.github/actions/setup-github-app
@@ -142,11 +143,6 @@ jobs:
           app_id: ${{ vars.APP_ID }}
           private_key: ${{ secrets.PRIVATE_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Настройка репозитория
-        uses: ./.github/actions/setup-repository
-        with:
-          token: ${{ steps.auth.outputs.token }}
 
       - name: Поиск неотсортированных issue
         id: find_issues
@@ -209,7 +205,7 @@ jobs:
   # Резервный ответ Gemini для issues
   gemini-backup:
     name: Резервный ответ Gemini
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'backup-response'
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'backup-response'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     
@@ -219,6 +215,9 @@ jobs:
       pull-requests: write
     
     steps:
+      - name: Клонирование репозитория
+        uses: actions/checkout@v4
+
       - name: Настройка GitHub токена
         id: auth
         uses: ./.github/actions/setup-github-app
@@ -226,11 +225,6 @@ jobs:
           app_id: ${{ vars.APP_ID }}
           private_key: ${{ secrets.PRIVATE_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Настройка репозитория
-        uses: ./.github/actions/setup-repository
-        with:
-          token: ${{ steps.auth.outputs.token }}
 
       - name: Настройка Python
         uses: actions/setup-python@v5
@@ -245,7 +239,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ steps.auth.outputs.token }}
-          ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
         run: |
           python3 << 'EOF'
           import os

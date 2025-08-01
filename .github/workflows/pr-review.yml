@@ -30,10 +30,15 @@ jobs:
       pull-requests: write
       issues: write
     concurrency:
-      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number }}
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
       cancel-in-progress: true
       
     steps:
+      - name: Клонирование репозитория
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Настройка GitHub токена
         id: auth
         uses: ./.github/actions/setup-github-app
@@ -42,12 +47,6 @@ jobs:
           private_key: ${{ secrets.PRIVATE_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Настройка репозитория
-        uses: ./.github/actions/setup-repository
-        with:
-          token: ${{ steps.auth.outputs.token }}
-          fetch_depth: 0
-
       - name: Получение деталей PR
         id: get_pr_details
         env:
@@ -55,7 +54,7 @@ jobs:
           COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            PR_NUMBER=${{ github.event.inputs.pr_number }}
+            PR_NUMBER=${{ inputs.pr_number }}
           elif [ "${{ github.event_name }}" = "issue_comment" ]; then
             PR_NUMBER=${{ github.event.issue.number }}
             ADDITIONAL_INSTRUCTIONS=$(echo "$COMMENT_BODY" | sed 's/.*@gemini-cli \/review//' | xargs)

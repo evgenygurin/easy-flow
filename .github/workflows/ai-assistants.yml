@@ -11,6 +11,12 @@ on:
     types: [created]
   pull_request_review:
     types: [submitted]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Номер PR для обработки'
+        required: false
+        type: number
 
 env:
   STANDARD_TIMEOUT: 15
@@ -37,6 +43,11 @@ jobs:
       actions: read
       
     steps:
+      - name: Клонирование репозитория
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 10
+
       - name: Настройка GitHub токена
         id: auth
         uses: ./.github/actions/setup-github-app
@@ -44,12 +55,6 @@ jobs:
           app_id: ${{ vars.APP_ID }}
           private_key: ${{ secrets.PRIVATE_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Настройка репозитория
-        uses: ./.github/actions/setup-repository
-        with:
-          token: ${{ steps.auth.outputs.token }}
-          fetch_depth: 10
 
       - name: Запуск ассистента Claude
         id: claude
@@ -85,6 +90,11 @@ jobs:
       issues: write
     
     steps:
+      - name: Клонирование репозитория
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 10
+
       - name: Настройка GitHub токена
         id: auth
         uses: ./.github/actions/setup-github-app
@@ -92,12 +102,6 @@ jobs:
           app_id: ${{ vars.APP_ID }}
           private_key: ${{ secrets.PRIVATE_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Настройка репозитория
-        uses: ./.github/actions/setup-repository
-        with:
-          token: ${{ steps.auth.outputs.token }}
-          fetch_depth: 10
 
       - name: Запуск Code Review от Claude
         uses: anthropics/claude-code-action@beta
@@ -142,6 +146,11 @@ jobs:
       repository-projects: read
     
     steps:
+      - name: Клонирование репозитория
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 10
+
       - name: Настройка GitHub токена
         id: auth
         uses: ./.github/actions/setup-github-app
@@ -149,12 +158,6 @@ jobs:
           app_id: ${{ vars.APP_ID }}
           private_key: ${{ secrets.PRIVATE_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Настройка репозитория
-        uses: ./.github/actions/setup-repository
-        with:
-          token: ${{ steps.auth.outputs.token }}
-          fetch_depth: 10
 
       - name: Настройка Node.js
         uses: actions/setup-node@v4
@@ -213,18 +216,10 @@ jobs:
       issues: write
     
     steps:
-      - name: Настройка GitHub токена
-        id: auth
-        uses: ./.github/actions/setup-github-app
-        with:
-          app_id: ${{ secrets.APP_ID }}
-          private_key: ${{ secrets.PRIVATE_KEY }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Получение ветки PR
         id: get_pr_branch
         env:
-          GH_TOKEN: ${{ steps.auth.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPOSITORY: ${{ github.repository }}
         run: |
           if [[ "${{ github.event_name }}" == "issue_comment" ]]; then
@@ -235,12 +230,19 @@ jobs:
             echo "name=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Настройка репозитория
-        uses: ./.github/actions/setup-repository
+      - name: Клонирование репозитория
+        uses: actions/checkout@v4
         with:
-          token: ${{ steps.auth.outputs.token }}
           ref: ${{ steps.get_pr_branch.outputs.name }}
           fetch_depth: 0
+
+      - name: Настройка GitHub токена
+        id: auth
+        uses: ./.github/actions/setup-github-app
+        with:
+          app_id: ${{ vars.APP_ID }}
+          private_key: ${{ secrets.PRIVATE_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Получение деталей PR
         id: get_pr

@@ -1,0 +1,228 @@
+name: 🔍 Validate GitHub Actions
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+  push:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+  workflow_dispatch:
+
+jobs:
+  validate-syntax:
+    name: Validate YAML Syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml
+
+      - name: Validate YAML syntax
+        run: |
+          python3 -c "
+          import yaml
+          import os
+          import sys
+
+          def validate_yaml_file(filepath):
+              try:
+                  with open(filepath, 'r', encoding='utf-8') as f:
+                      yaml.safe_load(f)
+                  return True, None
+              except Exception as e:
+                  return False, str(e)
+
+          errors = []
+          success = 0
+
+          # Check workflows
+          for file in os.listdir('.github/workflows'):
+              if file.endswith(('.yml', '.yaml')):
+                  filepath = f'.github/workflows/{file}'
+                  valid, error = validate_yaml_file(filepath)
+                  if valid:
+                      print(f'✅ {filepath}: VALID')
+                      success += 1
+                  else:
+                      print(f'❌ {filepath}: {error}')
+                      errors.append((filepath, error))
+
+          # Check actions
+          if os.path.exists('.github/actions'):
+              for root, dirs, files in os.walk('.github/actions'):
+                  for file in files:
+                      if file.endswith(('.yml', '.yaml')):
+                          filepath = os.path.join(root, file)
+                          valid, error = validate_yaml_file(filepath)
+                          if valid:
+                              print(f'✅ {filepath}: VALID')
+                              success += 1
+                          else:
+                              print(f'❌ {filepath}: {error}')
+                              errors.append((filepath, error))
+
+          print(f'\n📊 Summary: {success} files validated')
+          if errors:
+              print(f'❌ {len(errors)} files have errors')
+              sys.exit(1)
+          else:
+              print('🎉 All files are valid!')
+          "
+
+  validate-structure:
+    name: Validate GitHub Actions Structure
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: validate-syntax
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pyyaml
+
+      - name: Run validation script
+        run: python3 validate_actions.py
+
+  test-composite-action:
+    name: Test Composite Action
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: validate-structure
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test setup-github-app action
+        id: test-auth
+        uses: ./.github/actions/setup-github-app
+        with:
+          app_id: ""
+          private_key: ""
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify token output
+        run: |
+          if [ -n "${{ steps.test-auth.outputs.token }}" ]; then
+            echo "✅ Token output is present"
+          else
+            echo "❌ Token output is missing"
+            exit 1
+          fi
+
+  lint-workflows:
+    name: Lint Workflows with actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download actionlint
+        id: get_actionlint
+        run: bash <(curl https://raw.githubusercontent.com/rhymond/actionlint/main/scripts/download-actionlint.bash)
+        shell: bash
+
+      - name: Check workflow files
+        run: ${{ steps.get_actionlint.outputs.executable }} -color
+        shell: bash
+
+  security-check:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run security checks
+        run: |
+          echo "🔒 Checking for security issues..."
+          
+          # Check for hardcoded secrets
+          if grep -r "ghp_\|github_pat_" .github/workflows/ .github/actions/ 2>/dev/null; then
+            echo "❌ Found potential hardcoded tokens"
+            exit 1
+          fi
+          
+          # Check for overprivileged permissions
+          if grep -r "permissions:" .github/workflows/ | grep -E "write.*:.*write" 2>/dev/null; then
+            echo "⚠️ Found workflows with multiple write permissions - review needed"
+          fi
+          
+          # Check for shell injection vulnerabilities
+          if grep -r '\${{.*github\.event\.' .github/workflows/ | grep -v github.event.repository 2>/dev/null; then
+            echo "⚠️ Found potential shell injection vectors - review needed"
+          fi
+          
+          echo "✅ Security check completed"
+
+  check-best-practices:
+    name: Best Practices Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check best practices
+        run: |
+          echo "📋 Checking GitHub Actions best practices..."
+          
+          violations=0
+          
+          # Check for pinned action versions
+          echo "🔍 Checking for unpinned action versions..."
+          if grep -r "uses:.*@main\|uses:.*@master" .github/workflows/ .github/actions/ 2>/dev/null; then
+            echo "⚠️ Found unpinned action versions (using @main/@master)"
+            violations=$((violations + 1))
+          fi
+          
+          # Check for timeout settings
+          echo "🔍 Checking for timeout settings..."
+          workflow_count=$(find .github/workflows -name "*.yml" | wc -l)
+          timeout_count=$(grep -r "timeout-minutes:" .github/workflows/ | wc -l)
+          if [ $timeout_count -lt $workflow_count ]; then
+            echo "⚠️ Some workflows missing timeout settings"
+            violations=$((violations + 1))
+          fi
+          
+          # Check for concurrency settings
+          echo "🔍 Checking for concurrency controls..."
+          concurrency_count=$(grep -r "concurrency:" .github/workflows/ | wc -l)
+          if [ $concurrency_count -eq 0 ]; then
+            echo "⚠️ No concurrency controls found - consider adding for resource management"
+            violations=$((violations + 1))
+          fi
+          
+          echo "📊 Best practices violations: $violations"
+          
+          if [ $violations -eq 0 ]; then
+            echo "🎉 All best practices checks passed!"
+          else
+            echo "⚠️ Found $violations best practice violations"
+          fi
