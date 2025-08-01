@@ -1,0 +1,53 @@
+# CODEOWNERS file for easy-flow project
+# This file defines who should review PRs for specific parts of the codebase
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Global fallback - all files
+* @evgenygurin
+
+# Core application files
+/app/ @evgenygurin
+/main.py @evgenygurin
+
+# API routes and endpoints
+/app/api/ @evgenygurin
+
+# Services and business logic
+/app/services/ @evgenygurin
+
+# Models and data structures
+/app/models/ @evgenygurin
+
+# Configuration and core utilities
+/app/core/ @evgenygurin
+/CLAUDE.md @evgenygurin
+
+# Dependencies and requirements
+/requirements.txt @evgenygurin
+/pyproject.toml @evgenygurin
+/setup.py @evgenygurin
+
+# GitHub Actions and CI/CD
+/.github/ @evgenygurin
+/.github/workflows/ @evgenygurin
+
+# Security and configuration files
+/.gitleaks.toml @evgenygurin
+/.gitignore @evgenygurin
+
+# Tests - require review from maintainers
+/tests/ @evgenygurin
+
+# Documentation
+/docs/ @evgenygurin
+/README.md @evgenygurin
+/*.md @evgenygurin
+
+# Docker and deployment
+/Dockerfile @evgenygurin
+/docker-compose.yml @evgenygurin
+/.dockerignore @evgenygurin
+
+# Database migrations (if using Alembic)
+/alembic/ @evgenygurin
+/migrations/ @evgenygurin

@@ -1,0 +1,151 @@
+# GitLeaks configuration for easy-flow project
+# https://github.com/gitleaks/gitleaks
+
+title = "GitLeaks Configuration for Easy-Flow"
+
+[extend]
+# Extend the default configuration
+useDefault = true
+
+[[rules]]
+id = "api-key"
+description = "Generic API Key"
+regex = '''(?i)(api[_-]?key|apikey)[[:space:]]*[=:][[:space:]]*['""]?[a-z0-9]{16,}['""]?'''
+tags = ["api", "key", "secret"]
+
+[[rules]]
+id = "openai-api-key"
+description = "OpenAI API Key"
+regex = '''sk-[a-zA-Z0-9]{48}'''
+tags = ["openai", "api", "key"]
+
+[[rules]]
+id = "yandex-gpt-key"
+description = "Yandex GPT API Key"
+regex = '''AQVN[a-zA-Z0-9_-]{50,}'''
+tags = ["yandex", "gpt", "api", "key"]
+
+[[rules]]
+id = "database-url"
+description = "Database URL with credentials"
+regex = '''(?i)(database[_-]?url|db[_-]?url)[[:space:]]*[=:][[:space:]]*['""]?[a-z]+://[^:]+:[^@]+@[^/]+/[^'""\s]+['""]?'''
+tags = ["database", "url", "credentials"]
+
+[[rules]]
+id = "redis-url"
+description = "Redis URL with credentials"
+regex = '''(?i)(redis[_-]?url)[[:space:]]*[=:][[:space:]]*['""]?redis://[^:]*:[^@]*@[^/]+['""]?'''
+tags = ["redis", "url", "credentials"]
+
+[[rules]]
+id = "telegram-bot-token"
+description = "Telegram Bot Token"
+regex = '''[0-9]{8,10}:[a-zA-Z0-9_-]{35}'''
+tags = ["telegram", "bot", "token"]
+
+[[rules]]
+id = "whatsapp-token"
+description = "WhatsApp Business API Token"
+regex = '''(?i)(whatsapp[_-]?token|wa[_-]?token)[[:space:]]*[=:][[:space:]]*['""]?[a-zA-Z0-9]{100,}['""]?'''
+tags = ["whatsapp", "token", "api"]
+
+[[rules]]
+id = "vk-token"
+description = "VK API Token"
+regex = '''(?i)(vk[_-]?token|vk[_-]?access[_-]?token)[[:space:]]*[=:][[:space:]]*['""]?[a-zA-Z0-9]{85}['""]?'''
+tags = ["vk", "token", "api"]
+
+[[rules]]
+id = "bitrix-webhook"
+description = "Bitrix24 Webhook URL"
+regex = '''https://[^/]+\.bitrix24\.[^/]+/rest/[0-9]+/[a-zA-Z0-9]{32}/'''
+tags = ["bitrix", "webhook", "url"]
+
+[[rules]]
+id = "yookassa-key"
+description = "YooKassa API Key"
+regex = '''(?i)(yookassa[_-]?key|yk[_-]?key)[[:space:]]*[=:][[:space:]]*['""]?[a-zA-Z0-9_-]{20,}['""]?'''
+tags = ["yookassa", "payment", "key"]
+
+[[rules]]
+id = "wildberries-api-key"
+description = "Wildberries API Key"
+regex = '''(?i)(wb[_-]?api[_-]?key|wildberries[_-]?key)[[:space:]]*[=:][[:space:]]*['""]?[a-zA-Z0-9]{32,}['""]?'''
+tags = ["wildberries", "api", "key"]
+
+[[rules]]
+id = "ozon-api-key"
+description = "Ozon API Key"
+regex = '''(?i)(ozon[_-]?api[_-]?key|ozon[_-]?client[_-]?id)[[:space:]]*[=:][[:space:]]*['""]?[a-zA-Z0-9_-]{20,}['""]?'''
+tags = ["ozon", "api", "key"]
+
+[[rules]]
+id = "jwt-secret"
+description = "JWT Secret Key"
+regex = '''(?i)(jwt[_-]?secret|secret[_-]?key)[[:space:]]*[=:][[:space:]]*['""]?[a-zA-Z0-9_+=/-]{32,}['""]?'''
+tags = ["jwt", "secret", "key"]
+
+[[rules]]
+id = "private-key"
+description = "Private Key"
+regex = '''-----BEGIN (RSA |EC |DSA )?PRIVATE KEY-----'''
+tags = ["private", "key", "pem"]
+
+[[rules]]
+id = "password"
+description = "Generic Password"
+regex = '''(?i)(password|passwd|pwd)[[:space:]]*[=:][[:space:]]*['""][^'""]{8,}['""]'''
+tags = ["password", "credential"]
+
+# Allowlist for common false positives
+[[rules.allowlist]]
+description = "Test files and examples"
+paths = ['''tests/.*''', '''examples/.*''', '''docs/.*''']
+
+[[rules.allowlist]]
+description = "Configuration templates"
+regexes = ['''example.*''', '''template.*''', '''placeholder.*''']
+
+[[rules.allowlist]]
+description = "Comments and documentation"
+regexes = ['''#.*''', '''/\*.*\*/''', '''//.*''']
+
+# Global allowlist
+[allowlist]
+description = "Global allowlist for safe files"
+
+# Files to ignore completely
+files = [
+    '''.git/.*''',
+    '''node_modules/.*''',
+    '''__pycache__/.*''',
+    '''\.pyc$''',
+    '''\.pyo$''',
+    '''\.egg-info/.*''',
+    '''dist/.*''',
+    '''build/.*''',
+]
+
+# Paths to ignore
+paths = [
+    '''tests/fixtures/.*''',
+    '''.pytest_cache/.*''',
+    '''htmlcov/.*''',
+    '''.coverage''',
+    '''coverage.xml''',
+    '''.venv/.*''',
+    '''venv/.*''',
+]
+
+# Commits to ignore (by SHA)
+commits = []
+
+# Regexes for safe content
+regexes = [
+    '''fake.*password''',
+    '''test.*key''',
+    '''example.*token''',
+    '''placeholder.*secret''',
+    '''dummy.*api''',
+    '''mock.*credential''',
+]

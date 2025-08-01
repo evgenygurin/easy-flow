@@ -1,0 +1,191 @@
+name: 🔒 Security Issue
+description: Report a security vulnerability (for sensitive issues, please use private reporting)
+title: "[SECURITY] "
+labels: ["security", "needs-triage"]
+assignees:
+  - evgenygurin
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # ⚠️ Security Issue Report
+        
+        **IMPORTANT**: If this is a critical security vulnerability that could be exploited, 
+        please consider using GitHub's private vulnerability reporting instead of creating a public issue.
+        
+        Go to the Security tab → Report a vulnerability for private reporting.
+        
+        For general security improvements or non-critical issues, you can use this public template.
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity Level
+      description: How severe is this security issue?
+      options:
+        - Low - Minor security improvement
+        - Medium - Potential security concern
+        - High - Exploitable vulnerability
+        - Critical - Immediate security risk
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Security Issue Type
+      description: What type of security issue is this?
+      options:
+        - Authentication/Authorization
+        - Input Validation
+        - SQL Injection
+        - Cross-Site Scripting (XSS)
+        - Cross-Site Request Forgery (CSRF)
+        - Insecure Direct Object Reference
+        - Security Misconfiguration
+        - Sensitive Data Exposure
+        - Broken Access Control
+        - Insufficient Logging/Monitoring
+        - API Security
+        - Dependency Vulnerability
+        - Cryptographic Issue
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: vulnerability-description
+    attributes:
+      label: Vulnerability Description
+      description: Describe the security issue in detail
+      placeholder: |
+        Provide a clear description of the security vulnerability or concern.
+        Be as specific as possible while being mindful that this is a public issue.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected-component
+    attributes:
+      label: Affected Component
+      description: Which part of the application is affected?
+      options:
+        - API Endpoints
+        - Authentication System
+        - AI Service
+        - Database Layer
+        - File Upload/Handling
+        - Session Management
+        - Input Validation
+        - Configuration
+        - Dependencies
+        - Infrastructure
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected-endpoints
+    attributes:
+      label: Affected Endpoints/Features
+      description: List specific endpoints, features, or components affected
+      placeholder: |
+        - /api/endpoint1
+        - Authentication flow
+        - File upload feature
+        - etc.
+
+  - type: textarea
+    id: reproduction-steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can this security issue be reproduced? (Be careful not to provide actual exploit code in public)
+      placeholder: |
+        1. Step one
+        2. Step two
+        3. Step three
+        4. Observe security issue
+      value: |
+        1. 
+        2. 
+        3. 
+        4. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: potential-impact
+    attributes:
+      label: Potential Impact
+      description: What could an attacker achieve if this vulnerability is exploited?
+      placeholder: |
+        - Data access/modification
+        - Privilege escalation
+        - System compromise
+        - etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggested-mitigation
+    attributes:
+      label: Suggested Mitigation
+      description: Do you have suggestions for how to fix this security issue?
+      placeholder: |
+        - Input validation improvements
+        - Authentication checks
+        - Configuration changes
+        - etc.
+
+  - type: textarea
+    id: environment-details
+    attributes:
+      label: Environment Details
+      description: Environment where this issue was discovered
+      placeholder: |
+        - Python version: 
+        - FastAPI version: 
+        - Database: 
+        - OS: 
+        - Deployment type: 
+      value: |
+        - Python version: 
+        - FastAPI version: 
+        - Database: 
+        - OS: 
+        - Deployment type: 
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any additional information about this security issue
+      placeholder: Links to relevant security advisories, similar issues, etc.
+
+  - type: checkboxes
+    id: disclosure-agreement
+    attributes:
+      label: Responsible Disclosure Agreement
+      description: Please confirm your understanding of responsible disclosure
+      options:
+        - label: I understand this is a public issue and will not include actual exploit code
+          required: true
+        - label: I have considered using private vulnerability reporting for critical issues
+          required: true
+        - label: I will not publicly disclose details until the issue is resolved
+          required: true
+        - label: I am reporting this issue in good faith to help improve security
+          required: true
+
+  - type: checkboxes
+    id: additional-info
+    attributes:
+      label: Additional Information
+      options:
+        - label: I have checked that this issue hasn't been reported before
+          required: true
+        - label: I am willing to help test the fix once implemented
+          required: false
+        - label: I would like to be credited in the security advisory (if applicable)
+          required: false
