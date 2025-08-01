@@ -1,0 +1,30 @@
+name: "Настройка репозитория"
+description: "Стандартная настройка репозитория для AI workflows"
+inputs:
+  token:
+    description: "GitHub токен для клонирования"
+    required: true
+  fetch_depth:
+    description: "Глубина клонирования"
+    required: false
+    default: "10"
+  ref:
+    description: "Ветка для клонирования"
+    required: false
+runs:
+  using: "composite"
+  steps:
+    - name: Клонирование репозитория
+      uses: actions/checkout@v4
+      with:
+        token: ${{ inputs.token }}
+        fetch-depth: ${{ inputs.fetch_depth }}
+        ref: ${{ inputs.ref }}
+    
+    - name: Настройка окружения
+      shell: bash
+      run: |
+        echo "✅ Репозиторий клонирован"
+        echo "📁 Рабочая директория: $(pwd)"
+        echo "🌿 Текущая ветка: $(git branch --show-current)"
+        echo "📊 Количество файлов: $(find . -type f | wc -l)"

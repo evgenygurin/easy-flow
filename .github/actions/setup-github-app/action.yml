@@ -1,0 +1,39 @@
+name: "Настройка GitHub App токена"
+description: "Генерирует токен GitHub App или использует GITHUB_TOKEN"
+inputs:
+  app_id:
+    description: "ID GitHub App"
+    required: false
+  private_key:
+    description: "Приватный ключ GitHub App"
+    required: false
+  github_token:
+    description: "Fallback GitHub токен"
+    required: false
+    default: ${{ github.token }}
+outputs:
+  token:
+    description: "Сгенерированный токен для использования в workflows"
+    value: ${{ steps.generate_token.outputs.token || inputs.github_token }}
+runs:
+  using: "composite"
+  steps:
+    - name: Генерация токена GitHub App
+      id: generate_token
+      if: ${{ inputs.app_id }}
+      uses: actions/create-github-app-token@v1
+      with:
+        app-id: ${{ inputs.app_id }}
+        private-key: ${{ inputs.private_key }}
+    
+    - name: Проверка токена
+      shell: bash
+      run: |
+        if [ -n "${{ steps.generate_token.outputs.token }}" ]; then
+          echo "✅ Используется токен GitHub App"
+        elif [ -n "${{ inputs.github_token }}" ]; then
+          echo "✅ Используется GITHUB_TOKEN"
+        else
+          echo "❌ Не найден действительный токен"
+          exit 1
+        fi
