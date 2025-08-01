@@ -1,0 +1,92 @@
+# Claude Configuration for Security and Rate Limiting
+# This file defines security policies and rate limiting for Claude integration
+
+# Rate Limiting Configuration
+rate_limiting:
+  # Maximum requests per user per hour
+  max_requests_per_hour: 10
+  
+  # Maximum requests per user per day  
+  max_requests_per_day: 50
+  
+  # Cooldown period between requests (minutes)
+  cooldown_period: 5
+  
+  # Whitelist of users exempt from rate limiting
+  whitelist:
+    - evgenygurin
+    - claude-bot
+  
+  # Enable rate limiting enforcement
+  enabled: true
+
+# Security Configuration
+security:
+  # Allowed user associations for triggering Claude
+  allowed_associations:
+    - OWNER
+    - MEMBER
+    - COLLABORATOR
+  
+  # Additional allowed users (by username)
+  allowed_users:
+    - evgenygurin
+  
+  # Block external contributors by default
+  block_external: true
+  
+  # Log all Claude requests for audit
+  enable_audit_log: true
+
+# Performance Configuration  
+performance:
+  # Maximum execution time for Claude operations (minutes)
+  max_execution_time: 10
+  
+  # Git fetch depth for context
+  fetch_depth: 50
+  
+  # Enable resource monitoring
+  monitor_resources: true
+
+# Error Handling Configuration
+error_handling:
+  # Notify users on failures
+  notify_on_failure: true
+  
+  # Maximum retry attempts
+  max_retries: 2
+  
+  # Enable fallback mechanisms
+  enable_fallback: true
+
+# Monitoring Configuration
+monitoring:
+  # Track API usage costs
+  track_costs: true
+  
+  # Monitor request patterns for abuse
+  detect_abuse: true
+  
+  # Log performance metrics
+  log_metrics: true
+  
+  # Send alerts for threshold breaches
+  enable_alerts: true
+  
+  # Alert thresholds
+  thresholds:
+    cost_per_hour: 10.00  # USD
+    requests_per_minute: 5
+    failed_requests_threshold: 3
+
+# Notification Configuration
+notifications:
+  # Slack webhook for alerts (optional)
+  # slack_webhook: ${{ secrets.SLACK_WEBHOOK }}
+  
+  # Discord webhook for alerts (optional)  
+  # discord_webhook: ${{ secrets.DISCORD_WEBHOOK }}
+  
+  # Email notifications (optional)
+  # email_alerts: admin@example.com
