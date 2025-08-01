@@ -173,8 +173,8 @@ jobs:
             echo "⚠️ Found workflows with multiple write permissions - review needed"
           fi
           
-          # Check for shell injection vulnerabilities
-          if grep -r '\${{.*github\.event\.' .github/workflows/ | grep -v github.event.repository 2>/dev/null; then
+          # Check for shell injection vulnerabilities  
+          if grep -r '\$\{\{.*github\.event\.' .github/workflows/ | grep -v github.event.repository 2>/dev/null; then
             echo "⚠️ Found potential shell injection vectors - review needed"
           fi
           
