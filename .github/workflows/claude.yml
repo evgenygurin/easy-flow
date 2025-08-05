@@ -9,11 +9,6 @@ on:
     types: [opened, assigned]
   pull_request_review:
     types: [submitted]
-  pull_request:
-    types: [opened, synchronize, reopened]
-  push:
-    branches: [main, develop]
-  workflow_dispatch:
 
 jobs:
   claude:
@@ -21,161 +16,49 @@ jobs:
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
-      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude'))) ||
-      (github.event_name == 'pull_request') ||
-      (github.event_name == 'push') ||
-      (github.event_name == 'workflow_dispatch')
+      (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))
     runs-on: ubuntu-latest
-    
-    # Максимальные права для Claude
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      checks: write
-      discussions: write
-      statuses: write
-      actions: write
+      contents: read
+      pull-requests: read
+      issues: read
       id-token: write
-      security-events: write
-      repository-projects: write
-      packages: write
-      pages: write
-      deployments: write
-      
+      actions: read # Required for Claude to read CI results on PRs
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
 
       - name: Run Claude Code
         id: claude
-        uses: anthropics/claude-code-action@latest
+        uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
-          # Максимальные права для Claude агента
+          # This is an optional setting that allows Claude to read CI results on PRs
           additional_permissions: |
-            contents: write
-            pull-requests: write
-            issues: write
-            checks: write
-            discussions: write
-            statuses: write
-            actions: write
-            security-events: write
-            repository-projects: write
-            packages: write
-            pages: write
-            deployments: write
+            actions: read
           
-          # Используем Claude Sonnet 4 (можно переключить на Opus 4)
-          model: "claude-sonnet-4-20250514"
+          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4)
           # model: "claude-opus-4-20250514"
           
-          # Настройки триггеров
-          trigger_phrase: "@claude"
-          assignee_trigger: "claude-bot"
+          # Optional: Customize the trigger phrase (default: @claude)
+          # trigger_phrase: "/claude"
           
-          # Разрешенные команды - полный доступ ко всем инструментам
-          allowed_tools: |
-            Bash(*),
-            Read(*),
-            Write(*),
-            Edit(*),
-            MultiEdit(*),
-            Glob(*),
-            Grep(*),
-            LS(*),
-            Task(*),
-            TodoWrite(*),
-            WebFetch(*),
-            WebSearch(*),
-            NotebookRead(*),
-            NotebookEdit(*),
-            mcp__ide__getDiagnostics(*),
-            mcp__ide__executeCode(*)
+          # Optional: Trigger when specific user is assigned to an issue
+          # assignee_trigger: "claude-bot"
           
-          # Кастомные инструкции для Claude
-          custom_instructions: |
-            Ты - ведущий AI разработчик для проекта easy-flow.
-            
-            ПОЛНЫЕ ПРАВА И ВОЗМОЖНОСТИ:
-            - Создавай, изменяй и удаляй любые файлы
-            - Выполняй любые bash команды
-            - Создавай и управляй PR, issues, discussions
-            - Запускай тесты и CI/CD пипelines
-            - Управляй GitHub Actions workflows
-            - Работай с безопасностью и секретами
-            - Управляй пакетами и deployment'ами
-            - Создавай и изменяй документацию
-            
-            ПРОЕКТ СПЕЦИФИКА:
-            - Это Python FastAPI проект для AI e-commerce платформы
-            - Используем PostgreSQL, Redis, Docker
-            - Поддерживаем русский язык (pymorphy2, razdel)
-            - Интеграции: Telegram, WhatsApp, VK, Wildberries, Ozon, Bitrix24
-            - AI сервисы: OpenAI, YandexGPT
-            - Следуй CLAUDE.md инструкциям
-            
-            СТИЛЬ РАБОТЫ:
-            - Будь проактивным в решении проблем
-            - Автоматически исправляй найденные баги
-            - Улучшай код качество и безопасность
-            - Создавай тесты для нового кода
-            - Документируй изменения
-            - Используй русский язык для коммуникации
-            
-            БЕЗОПАСНОСТЬ:
-            - Никогда не коммиттить секреты или ключи
-            - Проверяй безопасность всех изменений
-            - Используй best practices для Python/FastAPI
-            - Валидируй все входные данные
+          # Optional: Allow Claude to run specific commands
+          allowed_tools: "Bash(npm install),Bash(npm run build),Bash(npm run test:*),Bash(npm run lint:*)"
           
-          # Переменные окружения для Claude
-          claude_env: |
-            PYTHON_VERSION: 3.12
-            FASTAPI_ENV: development
-            NODE_ENV: development
-            LANGUAGE: ru_RU.UTF-8
-            TZ: Europe/Moscow
-            
-          # Дополнительные настройки
-          timeout: 1800000  # 30 минут
-          max_iterations: 50
+          # Optional: Add custom instructions for Claude to customize its behavior for your project
+          # custom_instructions: |
+          #   Follow our coding standards
+          #   Ensure all new code has tests
+          #   Use TypeScript for new files
           
-          # GitHub настройки
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          
-      # Уведомления о результатах
-      - name: Claude Success Notification
-        if: success()
-        run: |
-          echo "✅ Claude успешно выполнил задачу!"
-          echo "Проверьте результаты в логах выше."
-          
-      - name: Claude Failure Notification  
-        if: failure()
-        run: |
-          echo "❌ Claude не смог выполнить задачу."
-          echo "Проверьте логи ошибок и попробуйте еще раз."
-          echo "::error::Claude execution failed"
+          # Optional: Custom environment variables for Claude
+          # claude_env: |
+          #   NODE_ENV: test
 
-      # Создание summary
-      - name: Create Job Summary
-        if: always()
-        run: |
-          echo "## 🤖 Отчет о работе Claude" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Статус:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Время выполнения:** $(date)" >> $GITHUB_STEP_SUMMARY
-          echo "**Триггер:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Пользователь:** ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ job.status }}" = "success" ]; then
-            echo "Claude успешно обработал запрос и внес необходимые изменения." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "Возникли ошибки при выполнении. Проверьте логи выше." >> $GITHUB_STEP_SUMMARY
-          fi

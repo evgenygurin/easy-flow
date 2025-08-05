@@ -2,6 +2,7 @@
 Тесты для NLP сервиса.
 """
 import pytest
+
 from app.services.nlp_service import NLPService
 
 
@@ -18,7 +19,7 @@ async def test_process_greeting_message(nlp_service: NLPService):
         message="Привет! Как дела?",
         user_id="test_user"
     )
-    
+
     assert result.intent == "greeting"
     assert result.language == "ru"
     assert result.confidence > 0.0
@@ -31,7 +32,7 @@ async def test_process_order_status_message(nlp_service: NLPService):
         message="Где мой заказ №12345?",
         user_id="test_user"
     )
-    
+
     assert result.intent == "order_status"
     assert result.entities is not None
     assert "order_number" in result.entities
@@ -45,7 +46,7 @@ async def test_process_complaint_message(nlp_service: NLPService):
         message="Я недоволен качеством товара, хочу подать жалобу",
         user_id="test_user"
     )
-    
+
     assert result.intent == "complaint"
     assert result.sentiment == "negative"
 
@@ -57,7 +58,7 @@ async def test_extract_entities_with_amount(nlp_service: NLPService):
         message="Верните мне 1500 рублей за заказ №999",
         user_id="test_user"
     )
-    
+
     assert result.entities is not None
     assert "amount" in result.entities
     assert result.entities["amount"] == 1500.0
@@ -72,7 +73,7 @@ async def test_extract_email_entity(nlp_service: NLPService):
         message="Мой email: test@example.com",
         user_id="test_user"
     )
-    
+
     assert result.entities is not None
     assert "email" in result.entities
     assert result.entities["email"] == "test@example.com"
@@ -85,7 +86,7 @@ async def test_detect_language_russian(nlp_service: NLPService):
         message="Здравствуйте, у меня проблема с товаром",
         user_id="test_user"
     )
-    
+
     assert result.language == "ru"
 
 
@@ -96,7 +97,7 @@ async def test_detect_language_english(nlp_service: NLPService):
         message="Hello, I have a problem with my order",
         user_id="test_user"
     )
-    
+
     assert result.language == "en"
 
 
@@ -107,7 +108,7 @@ async def test_sentiment_positive(nlp_service: NLPService):
         message="Спасибо большое! Всё отлично получил заказ!",
         user_id="test_user"
     )
-    
+
     assert result.sentiment == "positive"
 
 
@@ -118,7 +119,7 @@ async def test_sentiment_negative(nlp_service: NLPService):
         message="Ужасное качество! Всё сломано! Верните деньги!",
         user_id="test_user"
     )
-    
+
     assert result.sentiment == "negative"
 
 
@@ -129,6 +130,6 @@ async def test_unknown_intent(nlp_service: NLPService):
         message="абракадабра xyz 123",
         user_id="test_user"
     )
-    
+
     # Должно либо не найти намерение, либо иметь низкую уверенность
     assert result.intent is None or result.confidence < 0.5

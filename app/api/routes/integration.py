@@ -1,48 +1,25 @@
-"""
-API endpoints для интеграций с внешними платформами.
-"""
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
-from datetime import datetime
+"""API endpoints для интеграций с внешними платформами."""
+from typing import Any
 
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.models.integration import (
+    IntegrationRequest,
+    PlatformInfo,
+    WebhookPayload,
+)
 from app.services.integration_service import IntegrationService
+
 
 router = APIRouter()
 
 
-class PlatformInfo(BaseModel):
-    """Информация о подключенной платформе."""
-    platform_id: str
-    platform_name: str
-    status: str
-    connected_at: datetime
-    last_sync: Optional[datetime] = None
-    configuration: Dict[str, Any]
-
-
-class WebhookPayload(BaseModel):
-    """Входящий webhook от внешней платформы."""
-    platform: str = Field(..., description="Название платформы")
-    event_type: str = Field(..., description="Тип события")
-    data: Dict[str, Any] = Field(..., description="Данные события")
-    timestamp: Optional[datetime] = Field(None, description="Время события")
-    signature: Optional[str] = Field(None, description="Подпись для проверки")
-
-
-class IntegrationRequest(BaseModel):
-    """Запрос на подключение интеграции."""
-    platform: str = Field(..., description="Название платформы")
-    credentials: Dict[str, str] = Field(..., description="Данные для подключения")
-    configuration: Optional[Dict[str, Any]] = Field(None, description="Дополнительные настройки")
-
-
-@router.get("/platforms", response_model=List[str])
-async def get_supported_platforms() -> List[str]:
+@router.get("/platforms", response_model=list[str])
+async def get_supported_platforms() -> list[str]:
     """Получить список поддерживаемых платформ интеграции."""
     return [
         "wildberries",
-        "ozon", 
+        "ozon",
         "1c-bitrix",
         "insales",
         "shopify",
@@ -54,11 +31,11 @@ async def get_supported_platforms() -> List[str]:
     ]
 
 
-@router.get("/connected", response_model=List[PlatformInfo])
+@router.get("/connected", response_model=list[PlatformInfo])
 async def get_connected_platforms(
     user_id: str,
     integration_service: IntegrationService = Depends()
-) -> List[PlatformInfo]:
+) -> list[PlatformInfo]:
     """Получить список подключенных платформ для пользователя."""
     try:
         return await integration_service.get_user_integrations(user_id)
@@ -74,7 +51,7 @@ async def connect_platform(
     user_id: str,
     request: IntegrationRequest,
     integration_service: IntegrationService = Depends()
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Подключить новую платформу."""
     try:
         result = await integration_service.connect_platform(
@@ -96,7 +73,7 @@ async def disconnect_platform(
     platform_id: str,
     user_id: str,
     integration_service: IntegrationService = Depends()
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Отключить платформу."""
     try:
         await integration_service.disconnect_platform(user_id, platform_id)
@@ -113,10 +90,9 @@ async def handle_webhook(
     platform: str,
     payload: WebhookPayload,
     integration_service: IntegrationService = Depends()
-) -> Dict[str, str]:
-    """
-    Обработка входящих webhook'ов от внешних платформ.
-    
+) -> dict[str, str]:
+    """Обработка входящих webhook'ов от внешних платформ.
+
     Поддерживаемые платформы:
     - wildberries: новые заказы, изменения статусов
     - ozon: обновления товаров, заказы
@@ -139,7 +115,7 @@ async def sync_platform_data(
     platform_id: str,
     user_id: str,
     integration_service: IntegrationService = Depends()
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Принудительная синхронизация данных с платформой."""
     try:
         result = await integration_service.sync_platform_data(user_id, platform_id)
@@ -156,11 +132,11 @@ async def sync_platform_data(
 
 
 @router.get("/webhook-url/{platform}")
-async def get_webhook_url(platform: str) -> Dict[str, str]:
+async def get_webhook_url(platform: str) -> dict[str, str]:
     """Получить URL для настройки webhook'а на внешней платформе."""
     base_url = "https://your-domain.com"  # TODO: получать из конфигурации
     webhook_url = f"{base_url}/api/v1/integration/webhook/{platform}"
-    
+
     return {
         "webhook_url": webhook_url,
         "platform": platform,

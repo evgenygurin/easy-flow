@@ -1,55 +1,53 @@
-"""
-AI сервис для генерации ответов клиентам.
-"""
-from typing import Optional, Dict, Any, List
-import structlog
-from datetime import datetime
+"""AI сервис для генерации ответов клиентам."""
 from functools import lru_cache
-import hashlib
+from typing import Any
+
+import structlog
 from pydantic import BaseModel, Field
 
 from app.models.conversation import MessageResponse
-from app.core.config import settings
+
 
 logger = structlog.get_logger()
 
 
 class AIResponse(BaseModel):
     """Ответ от AI сервиса."""
-    
+
     response: str = Field(..., description="Ответ AI системы")
     confidence: float = Field(default=0.8, ge=0.0, le=1.0, description="Уверенность в ответе")
-    suggested_actions: List[str] = Field(default_factory=list, description="Предлагаемые действия")
-    next_questions: List[str] = Field(default_factory=list, description="Следующие вопросы")
+    suggested_actions: list[str] = Field(default_factory=list, description="Предлагаемые действия")
+    next_questions: list[str] = Field(default_factory=list, description="Следующие вопросы")
 
 
 class AIService:
     """Сервис для работы с AI моделями."""
-    
+
     def __init__(self) -> None:
         # TODO: Инициализация OpenAI/YandexGPT клиентов
-        self._templates: Dict[str, Dict[str, Any]] = self._load_response_templates()
-        self._knowledge_base: List[Dict[str, Any]] = self._load_knowledge_base()
-    
+        self._templates: dict[str, dict[str, Any]] = self._load_response_templates()
+        self._knowledge_base: list[dict[str, Any]] = self._load_knowledge_base()
+
     async def generate_response(
         self,
         message: str,
-        intent: Optional[str] = None,
-        entities: Optional[Dict[str, Any]] = None,
-        conversation_history: Optional[List[MessageResponse]] = None,
-        user_context: Optional[Dict[str, Any]] = None
+        intent: str | None = None,
+        entities: dict[str, Any] | None = None,
+        conversation_history: list[MessageResponse] | None = None,
+        user_context: dict[str, Any] | None = None
     ) -> AIResponse:
-        """
-        Генерация ответа на сообщение клиента.
-        
+        """Генерация ответа на сообщение клиента.
+
         Args:
+        ----
             message: Сообщение пользователя
             intent: Распознанное намерение
             entities: Извлеченные сущности
             conversation_history: История диалога
             user_context: Контекст пользователя
-            
+
         Returns:
+        -------
             AIResponse: Ответ от AI
         """
         try:
@@ -59,7 +57,7 @@ class AIService:
                 entities_count=len(entities) if entities else 0,
                 history_length=len(conversation_history) if conversation_history else 0
             )
-            
+
             # Если есть готовый шаблон для намерения, используем его
             if intent and intent in self._templates:
                 response = self._generate_template_response(intent, entities)
@@ -69,7 +67,7 @@ class AIService:
                     suggested_actions=self._get_suggested_actions(intent),
                     next_questions=self._get_next_questions(intent)
                 )
-            
+
             # Если есть информация в базе знаний
             kb_response = self._search_knowledge_base(message, intent)
             if kb_response:
@@ -78,14 +76,14 @@ class AIService:
                     confidence=0.8,
                     suggested_actions=self._get_suggested_actions(intent)
                 )
-            
+
             # Генерация ответа через LLM (заглушка)
             llm_response = await self._generate_llm_response(
                 message, intent, entities, conversation_history, user_context
             )
-            
+
             return llm_response
-            
+
         except Exception as e:
             logger.error("Ошибка генерации ответа AI", error=str(e))
             # Fallback ответ
@@ -93,18 +91,18 @@ class AIService:
                 response="Извините, я не совсем понял ваш вопрос. Можете переформулировать?",
                 confidence=0.3
             )
-    
+
     def _generate_template_response(
-        self, 
-        intent: str, 
-        entities: Optional[Dict[str, Any]] = None
+        self,
+        intent: str,
+        entities: dict[str, Any] | None = None
     ) -> str:
         """Генерация ответа на основе шаблона."""
         template = self._templates.get(intent, {}).get("response", "")
-        
+
         if not template:
             return "Извините, я не могу помочь с этим вопросом."
-        
+
         # Подстановка сущностей в шаблон
         if entities:
             try:
@@ -114,68 +112,67 @@ class AIService:
                 response = template
         else:
             response = template
-        
+
         return response
-    
+
     @lru_cache(maxsize=128)
     def _generate_template_response_cached(
-        self, 
-        intent: str, 
+        self,
+        intent: str,
         entities_hash: str
     ) -> str:
         """Кэшированная версия генерации ответа на основе шаблона."""
         # Восстанавливаем entities из хэша (упрощенная реализация)
         # В реальной реализации можно использовать более сложную систему кэширования
         return self._generate_template_response(intent, None)
-    
-    def _search_knowledge_base(self, message: str, intent: Optional[str]) -> Optional[str]:
+
+    def _search_knowledge_base(self, message: str, intent: str | None) -> str | None:
         """Поиск ответа в базе знаний."""
         message_lower = message.lower()
-        
+
         # Простой поиск по ключевым словам
         for kb_item in self._knowledge_base:
             for keyword in kb_item["keywords"]:
                 if keyword in message_lower:
                     return kb_item["response"]
-        
+
         return None
-    
+
     @lru_cache(maxsize=256)
-    def _search_knowledge_base_cached(self, message: str, intent: Optional[str]) -> Optional[str]:
+    def _search_knowledge_base_cached(self, message: str, intent: str | None) -> str | None:
         """Кэшированная версия поиска в базе знаний."""
         return self._search_knowledge_base(message, intent)
-    
+
     async def _generate_llm_response(
         self,
         message: str,
-        intent: Optional[str],
-        entities: Optional[Dict[str, Any]],
-        conversation_history: Optional[List[MessageResponse]],
-        user_context: Optional[Dict[str, Any]]
+        intent: str | None,
+        entities: dict[str, Any] | None,
+        conversation_history: list[MessageResponse] | None,
+        user_context: dict[str, Any] | None
     ) -> AIResponse:
         """Генерация ответа через LLM (OpenAI/YandexGPT)."""
-        
         # Формируем промпт для LLM
-        system_prompt = self._build_system_prompt(intent)
-        user_prompt = self._build_user_prompt(message, entities, conversation_history)
-        
+        self._build_system_prompt(intent)
+        self._build_user_prompt(message, entities, conversation_history)
+
         # TODO: Здесь будет реальный вызов OpenAI/YandexGPT API
         # Пока возвращаем заглушку
-        
+
         response_text = self._generate_fallback_response(intent, message)
-        
+
         return AIResponse(
             response=response_text,
             confidence=0.7,
             suggested_actions=self._get_suggested_actions(intent)
         )
-    
-    def _build_system_prompt(self, intent: Optional[str]) -> str:
+
+    def _build_system_prompt(self, intent: str | None) -> str:
         """Построение системного промпта."""
         base_prompt = """
         Ты - AI помощник для службы поддержки клиентов e-commerce платформы.
         Твоя задача - помочь клиентам с их вопросами и проблемами.
-        
+
         Правила:
         1. Отвечай на русском языке
         2. Будь вежливым и профессиональным
@@ -183,7 +180,7 @@ class AIService:
         4. Если не знаешь ответа, честно скажи об этом
         5. Предлагай следующие шаги для решения проблемы
         """
-        
+
         if intent:
             intent_specific = {
                 "order_status": "Клиент интересуется статусом заказа. Запроси номер заказа если его нет.",
@@ -191,32 +188,32 @@ class AIService:
                 "refund_request": "Клиент хочет вернуть товар. Объясни процедуру возврата.",
                 "product_info": "Клиент спрашивает о товаре. Предоставь подробную информацию.",
             }
-            
+
             if intent in intent_specific:
                 base_prompt += f"\n\nТекущая ситуация: {intent_specific[intent]}"
-        
+
         return base_prompt
-    
+
     def _build_user_prompt(
         self,
         message: str,
-        entities: Optional[Dict[str, Any]],
-        conversation_history: Optional[List[MessageResponse]]
+        entities: dict[str, Any] | None,
+        conversation_history: list[MessageResponse] | None
     ) -> str:
         """Построение пользовательского промпта."""
         prompt = f"Сообщение клиента: {message}"
-        
+
         if entities:
             prompt += f"\nИзвлеченная информация: {entities}"
-        
+
         if conversation_history and len(conversation_history) > 1:
             prompt += "\n\nПредыдущий контекст диалога:"
             for msg in conversation_history[-5:]:  # Последние 5 сообщений
                 prompt += f"\n{msg.message_type}: {msg.content}"
-        
+
         return prompt
-    
-    def _generate_fallback_response(self, intent: Optional[str], message: str) -> str:
+
+    def _generate_fallback_response(self, intent: str | None, message: str) -> str:
         """Генерация fallback ответа."""
         fallback_responses = {
             "greeting": "Здравствуйте! Как я могу вам помочь?",
@@ -227,13 +224,13 @@ class AIService:
             "technical_support": "Опишите подробнее техническую проблему, с которой вы столкнулись.",
             "goodbye": "Спасибо за обращение! Если у вас возникнут еще вопросы, обращайтесь."
         }
-        
+
         return fallback_responses.get(
-            intent, 
+            intent or "unknown",
             "Я готов помочь вам. Не могли бы вы уточнить ваш вопрос?"
         )
-    
-    def _get_suggested_actions(self, intent: Optional[str]) -> List[str]:
+
+    def _get_suggested_actions(self, intent: str | None) -> list[str]:
         """Получение предлагаемых действий."""
         actions = {
             "order_status": [
@@ -257,10 +254,10 @@ class AIService:
                 "Получить компенсацию"
             ]
         }
-        
-        return actions.get(intent, [])
-    
-    def _get_next_questions(self, intent: Optional[str]) -> List[str]:
+
+        return actions.get(intent or "unknown", [])
+
+    def _get_next_questions(self, intent: str | None) -> list[str]:
         """Получение следующих вопросов."""
         questions = {
             "order_status": [
@@ -274,10 +271,10 @@ class AIService:
                 "Хотите узнать о скидках?"
             ]
         }
-        
-        return questions.get(intent, [])
-    
-    def _load_response_templates(self) -> Dict[str, Dict[str, Any]]:
+
+        return questions.get(intent or "unknown", [])
+
+    def _load_response_templates(self) -> dict[str, dict[str, Any]]:
         """Загрузка шаблонов ответов."""
         return {
             "greeting": {
@@ -290,8 +287,8 @@ class AIService:
                 "response": "Спасибо за обращение! Хорошего дня и удачных покупок! Если у вас возникнут еще вопросы, я всегда готов помочь."
             }
         }
-    
-    def _load_knowledge_base(self) -> List[Dict[str, Any]]:
+
+    def _load_knowledge_base(self) -> list[dict[str, Any]]:
         """Загрузка базы знаний."""
         return [
             {

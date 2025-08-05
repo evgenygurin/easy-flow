@@ -1,17 +1,17 @@
 """
 Конфигурация для тестов.
 """
+import uuid
+from unittest.mock import Mock
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import Mock
-import uuid
-from datetime import datetime
 
 from app.api.main import app
-from app.services.conversation_service import ConversationService
-from app.services.nlp_service import NLPService
 from app.services.ai_service import AIService
+from app.services.conversation_service import ConversationService
 from app.services.integration_service import IntegrationService
+from app.services.nlp_service import NLPService
 
 
 @pytest.fixture
