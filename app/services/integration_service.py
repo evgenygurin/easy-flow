@@ -253,6 +253,17 @@ class IntegrationService:
                 status=order_data.get("status")
             )
 
+        # Log successful webhook processing
+        self.security_manager.log_audit_event(
+            platform="wildberries",
+            user_id="webhook",
+            action="webhook_processing", 
+            resource="webhook",
+            method="POST",
+            status_code=200,
+            request_data={"event_type": event_type}
+        )
+        
         return str(uuid.uuid4())
 
     async def _handle_ozon_webhook(self, payload: dict[str, Any]) -> str:

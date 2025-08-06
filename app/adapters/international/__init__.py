@@ -1,0 +1,1 @@
+"""International e-commerce platform adapters."""
