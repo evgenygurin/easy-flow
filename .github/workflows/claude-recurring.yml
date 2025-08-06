@@ -2,8 +2,8 @@ name: Claude Recurring Tasks
 
 on:
   schedule:
-    # Run daily at 2 AM UTC - customize this cron expression as needed
-    - cron: '0 2 * * *'
+    # Run daily at 10 PM Moscow time (19:00 UTC)
+    - cron: '0 19 * * *'
   workflow_dispatch:
 
 jobs:
