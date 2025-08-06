@@ -8,6 +8,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 from app.models.integration import IntegrationResult, PlatformInfo
+from app.repositories.interfaces.integration_repository import IntegrationRepository
 
 
 logger = structlog.get_logger()
@@ -30,16 +31,15 @@ class SyncResult(BaseModel):
 class IntegrationService:
     """Сервис для управления интеграциями с внешними платформами."""
 
-    def __init__(self) -> None:
-        # TODO: Подключить к реальной БД
-        self._user_integrations: dict[str, list[PlatformInfo]] = {}
+    def __init__(self, integration_repository: IntegrationRepository) -> None:
+        self.integration_repository = integration_repository
         self._webhook_handlers: dict[str, Callable[[dict[str, Any]], Awaitable[str]]] = self._setup_webhook_handlers()
 
     async def get_user_integrations(self, user_id: str) -> list[PlatformInfo]:
         """Получить список подключенных интеграций для пользователя."""
         try:
             logger.info("Получение интеграций пользователя", user_id=user_id)
-            return self._user_integrations.get(user_id, [])
+            return await self.integration_repository.get_user_integrations(user_id)
         except Exception as e:
             logger.error("Ошибка получения интеграций", error=str(e), user_id=user_id)
             return []
@@ -75,21 +75,18 @@ class IntegrationService:
             # Проверка учетных данных
             await self._validate_credentials(platform, credentials)
 
-            # Создание записи об интеграции
-            platform_id = str(uuid.uuid4())
-            platform_info = PlatformInfo(
-                platform_id=platform_id,
+            # Создание записи об интеграции через repository
+            platform_info = await self.integration_repository.create_integration(
+                user_id=user_id,
                 platform_name=platform,
-                status="connected",
-                connected_at=datetime.now(),
-                configuration=configuration or {}
+                credentials=credentials,
+                configuration=configuration
             )
-
-            # Сохранение в "БД"
-            if user_id not in self._user_integrations:
-                self._user_integrations[user_id] = []
-
-            self._user_integrations[user_id].append(platform_info)
+            
+            if not platform_info:
+                raise ValueError("Failed to create integration")
+            
+            platform_id = platform_info.platform_id
 
             logger.info(
                 "Платформа успешно подключена",
@@ -114,11 +111,9 @@ class IntegrationService:
         try:
             logger.info("Отключение платформы", user_id=user_id, platform_id=platform_id)
 
-            user_integrations = self._user_integrations.get(user_id, [])
-            self._user_integrations[user_id] = [
-                integration for integration in user_integrations
-                if integration.platform_id != platform_id
-            ]
+            success = await self.integration_repository.disconnect_integration(platform_id)
+            if not success:
+                raise ValueError(f"Failed to disconnect platform {platform_id}")
 
             logger.info("Платформа отключена", user_id=user_id, platform_id=platform_id)
 
@@ -169,16 +164,17 @@ class IntegrationService:
             logger.info("Синхронизация данных", user_id=user_id, platform_id=platform_id)
 
             # TODO: Реализовать реальную синхронизацию
-            records_updated = 0
+            records_updated = 42  # Заглушка
             sync_time = datetime.now()
 
-            # Обновляем время последней синхронизации
-            user_integrations = self._user_integrations.get(user_id, [])
-            for integration in user_integrations:
-                if integration.platform_id == platform_id:
-                    integration.last_sync = sync_time
-                    records_updated = 42  # Заглушка
-                    break
+            # Обновляем время последней синхронизации через repository
+            integration = await self.integration_repository.update_last_sync(
+                integration_id=platform_id,
+                sync_time=sync_time
+            )
+            
+            if not integration:
+                raise ValueError(f"Integration {platform_id} not found")
 
             logger.info(
                 "Синхронизация завершена",
@@ -255,16 +251,8 @@ class IntegrationService:
                 status=order_data.get("status")
             )
 
-        # Log successful webhook processing
-        self.security_manager.log_audit_event(
-            platform="wildberries",
-            user_id="webhook",
-            action="webhook_processing",
-            resource="webhook",
-            method="POST",
-            status_code=200,
-            request_data={"event_type": event_type}
-        )
+        # TODO: Add proper security audit logging
+        logger.info("Webhook processed successfully", platform="wildberries", event_type=event_type)
 
         return str(uuid.uuid4())
 

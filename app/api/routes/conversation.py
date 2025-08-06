@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from app.api.dependencies import get_conversation_service
 from app.models.conversation import ConversationResponse, Platform
 from app.services.conversation_service import ConversationService
 from app.services.nlp_service import NLPService
@@ -78,7 +79,7 @@ class ChatResponse(BaseModel):
 @router.post("/chat", response_model=ChatResponse)
 async def process_chat_message(
     request: ChatRequest,
-    conversation_service: ConversationService = Depends(),
+    conversation_service: ConversationService = Depends(get_conversation_service),
     nlp_service: NLPService = Depends()
 ) -> ChatResponse:
     """Обработка сообщения в чате с клиентом.

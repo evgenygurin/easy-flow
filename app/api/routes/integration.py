@@ -3,6 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.api.dependencies import get_integration_service
 from app.models.integration import (
     IntegrationRequest,
     PlatformInfo,
@@ -44,7 +45,7 @@ async def get_supported_platforms() -> list[str]:
 @router.get("/connected", response_model=list[PlatformInfo])
 async def get_connected_platforms(
     user_id: str,
-    integration_service: IntegrationService = Depends()
+    integration_service: IntegrationService = Depends(get_integration_service)
 ) -> list[PlatformInfo]:
     """Получить список подключенных платформ для пользователя."""
     try:
@@ -60,7 +61,7 @@ async def get_connected_platforms(
 async def connect_platform(
     user_id: str,
     request: IntegrationRequest,
-    integration_service: IntegrationService = Depends()
+    integration_service: IntegrationService = Depends(get_integration_service)
 ) -> dict[str, str]:
     """Подключить новую платформу."""
     try:
@@ -82,7 +83,7 @@ async def connect_platform(
 async def disconnect_platform(
     platform_id: str,
     user_id: str,
-    integration_service: IntegrationService = Depends()
+    integration_service: IntegrationService = Depends(get_integration_service)
 ) -> dict[str, str]:
     """Отключить платформу."""
     try:
@@ -99,7 +100,7 @@ async def disconnect_platform(
 async def handle_webhook(
     platform: str,
     payload: WebhookPayload,
-    integration_service: IntegrationService = Depends()
+    integration_service: IntegrationService = Depends(get_integration_service)
 ) -> dict[str, str]:
     """Обработка входящих webhook'ов от внешних платформ.
 
@@ -137,7 +138,7 @@ async def sync_platform_data(
     platform_id: str,
     user_id: str,
     operation: str = "orders",
-    integration_service: IntegrationService = Depends()
+    integration_service: IntegrationService = Depends(get_integration_service)
 ) -> dict[str, Any]:
     """Принудительная синхронизация данных с платформой.
 
@@ -175,7 +176,7 @@ async def sync_platform_data(
 
 @router.get("/health")
 async def get_health_status(
-    integration_service: IntegrationService = Depends()
+    integration_service: IntegrationService = Depends(get_integration_service)
 ) -> dict[str, Any]:
     """Получить статус здоровья всех интеграций."""
     try:
@@ -194,7 +195,7 @@ async def get_audit_logs(
     platform: str = None,
     action: str = None,
     limit: int = 100,
-    integration_service: IntegrationService = Depends()
+    integration_service: IntegrationService = Depends(get_integration_service)
 ) -> dict[str, Any]:
     """Получить журнал аудита интеграций."""
     try:
@@ -228,7 +229,7 @@ async def get_audit_logs(
 async def sync_all_platforms(
     user_id: str,
     operation: str = "orders",
-    integration_service: IntegrationService = Depends()
+    integration_service: IntegrationService = Depends(get_integration_service)
 ) -> dict[str, Any]:
     """Синхронизация данных со всеми подключенными платформами."""
     if operation not in ["orders", "products", "customers"]:

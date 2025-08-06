@@ -14,6 +14,9 @@ from app.models.conversation import (
     Platform,
     SessionContext,
 )
+from app.repositories.interfaces.conversation_repository import ConversationRepository
+from app.repositories.interfaces.message_repository import MessageRepository
+from app.repositories.interfaces.user_repository import UserRepository
 from app.services.ai_service import AIService
 from app.services.flow.flow_service import ConversationFlowService
 
@@ -24,12 +27,19 @@ logger = structlog.get_logger()
 class ConversationService:
     """Сервис для управления диалогами с клиентами."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        user_repository: UserRepository,
+        conversation_repository: ConversationRepository,
+        message_repository: MessageRepository
+    ) -> None:
+        self.user_repository = user_repository
+        self.conversation_repository = conversation_repository
+        self.message_repository = message_repository
         self.ai_service = AIService()
         self.flow_service = ConversationFlowService()
-        # TODO: Подключить к реальной БД
+        # In-memory sessions for flow state - TODO: Consider persistent storage
         self._sessions: dict[str, SessionContext] = {}
-        self._conversations: dict[str, ConversationResponse] = {}
 
     async def process_conversation(
         self,
@@ -65,22 +75,40 @@ class ConversationService:
                 platform=platform.value
             )
 
-            # Получаем или создаем контекст сессии
-            context = await self._get_or_create_session_context(
-                user_id, session_id, platform
+            # Получаем или создаем пользователя
+            user = await self.user_repository.get_or_create_user(
+                external_id=user_id,
+                platform=platform
             )
+            if not user:
+                raise ValueError(f"Failed to get/create user {user_id}")
 
-            # Добавляем сообщение пользователя в историю
-            user_message = MessageResponse(
-                id=str(uuid.uuid4()),
+            # Получаем или создаем диалог
+            conversation = await self.conversation_repository.get_by_session_id(session_id)
+            if not conversation:
+                conversation = await self.conversation_repository.create_conversation(
+                    user_id=user.id,
+                    session_id=session_id,
+                    platform=platform
+                )
+                if not conversation:
+                    raise ValueError(f"Failed to create conversation for session {session_id}")
+
+            # Добавляем сообщение пользователя в БД
+            user_message = await self.message_repository.add_message(
+                conversation_id=conversation.id,
                 content=message,
                 message_type=MessageType.USER,
-                user_id=user_id,
-                session_id=session_id,
-                platform=platform,
-                created_at=datetime.now()
+                intent=intent,
+                entities=entities
             )
-            context.conversation_history.append(user_message)
+            if not user_message:
+                raise ValueError("Failed to add user message")
+
+            # Получаем или создаем контекст сессии для flow service
+            context = await self._get_or_create_session_context(
+                user.id, session_id, platform
+            )
 
             # Обновляем контекст сессии
             context.current_intent = intent
@@ -98,17 +126,12 @@ class ConversationService:
                     entities=entities
                 )
 
-                # Добавляем сообщение пользователя и ответ в историю
-                ai_message = MessageResponse(
-                    id=str(uuid.uuid4()),
+                # Добавляем ответ AI в БД
+                ai_message = await self.message_repository.add_message(
+                    conversation_id=conversation.id,
                     content=flow_result.response,
-                    message_type=MessageType.ASSISTANT,
-                    user_id=user_id,
-                    session_id=session_id,
-                    platform=platform,
-                    created_at=datetime.now()
+                    message_type=MessageType.ASSISTANT
                 )
-                context.conversation_history.append(ai_message)
 
                 # Сохраняем обновленный контекст
                 self._sessions[session_id] = context
@@ -130,17 +153,12 @@ class ConversationService:
                     user_context=context.user_preferences
                 )
 
-                # Добавляем ответ AI в историю
-                ai_message = MessageResponse(
-                    id=str(uuid.uuid4()),
+                # Добавляем ответ AI в БД
+                ai_message = await self.message_repository.add_message(
+                    conversation_id=conversation.id,
                     content=ai_response.response,
-                    message_type=MessageType.ASSISTANT,
-                    user_id=user_id,
-                    session_id=session_id,
-                    platform=platform,
-                    created_at=datetime.now()
+                    message_type=MessageType.ASSISTANT
                 )
-                context.conversation_history.append(ai_message)
 
                 # Сохраняем обновленный контекст
                 self._sessions[session_id] = context
@@ -177,12 +195,29 @@ class ConversationService:
     async def get_user_sessions(self, user_id: str) -> list[ConversationResponse]:
         """Получить все сессии пользователя."""
         try:
-            # TODO: Реализовать запрос к БД
-            user_conversations = [
-                conv for conv in self._conversations.values()
-                if conv.user_id == user_id
-            ]
-            return user_conversations
+            # Get user first
+            user = await self.user_repository.get_by_external_id(user_id, Platform.WEB)
+            if not user:
+                return []
+            
+            # Get user conversations from repository
+            conversations = await self.conversation_repository.get_user_conversations(user.id)
+            
+            # Convert to ConversationResponse format
+            conversation_responses = []
+            for conv in conversations:
+                conversation_responses.append(ConversationResponse(
+                    id=conv.id,
+                    user_id=conv.user_id,
+                    session_id=conv.session_id,
+                    platform=Platform(conv.platform),
+                    status=conv.status,
+                    created_at=conv.created_at,
+                    updated_at=conv.updated_at,
+                    context=conv.context
+                ))
+            
+            return conversation_responses
         except Exception as e:
             logger.error("Ошибка получения сессий пользователя", error=str(e), user_id=user_id)
             return []
@@ -190,10 +225,14 @@ class ConversationService:
     async def get_session_history(self, session_id: str) -> list[dict[str, Any]]:
         """Получить историю сообщений в сессии."""
         try:
-            context = self._sessions.get(session_id)
-            if not context:
+            # Get conversation by session ID
+            conversation = await self.conversation_repository.get_by_session_id(session_id)
+            if not conversation:
                 return []
-
+            
+            # Get message history from repository
+            messages = await self.message_repository.get_conversation_history(conversation.id)
+            
             return [
                 {
                     "id": msg.id,
@@ -201,7 +240,7 @@ class ConversationService:
                     "type": msg.message_type,
                     "created_at": msg.created_at.isoformat()
                 }
-                for msg in context.conversation_history
+                for msg in messages
             ]
         except Exception as e:
             logger.error("Ошибка получения истории сессии", error=str(e), session_id=session_id)
@@ -247,7 +286,7 @@ class ConversationService:
         if session_id in self._sessions:
             return self._sessions[session_id]
 
-        # Создаем новый контекст сессии
+        # Создаем новый контекст сессии для flow service
         context = SessionContext(
             user_id=user_id,
             session_id=session_id,
@@ -256,7 +295,10 @@ class ConversationService:
             last_activity=datetime.now()
         )
 
-        # TODO: Загрузить предпочтения пользователя из БД
+        # Загружаем предпочтения пользователя из БД
+        user = await self.user_repository.get_by_external_id(user_id, platform)
+        if user and user.preferences:
+            context.user_preferences = user.preferences
 
         self._sessions[session_id] = context
         return context
