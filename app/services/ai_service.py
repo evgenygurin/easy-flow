@@ -2,10 +2,14 @@
 from functools import lru_cache
 from typing import Any
 
+from openai import AsyncOpenAI
 import structlog
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.models.conversation import MessageResponse
+from app.services.cache_service import cache_service
+from app.services.embeddings_service import embeddings_service
 
 
 logger = structlog.get_logger()
@@ -24,9 +28,23 @@ class AIService:
     """Сервис для работы с AI моделями."""
 
     def __init__(self) -> None:
-        # TODO: Инициализация OpenAI/YandexGPT клиентов
+        # Инициализация OpenAI клиента
+        if settings.OPENAI_API_KEY:
+            self._openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        else:
+            self._openai_client = None
+            logger.warning("OpenAI API ключ не настроен")
+        
+        # TODO: Инициализация YandexGPT клиента
+        self._yandex_gpt_available = bool(settings.YANDEX_GPT_API_KEY)
+        
         self._templates: dict[str, dict[str, Any]] = self._load_response_templates()
         self._knowledge_base: list[dict[str, Any]] = self._load_knowledge_base()
+        
+        # Инициализация embeddings индекса базы знаний
+        self._knowledge_embeddings: dict[str, Any] = {}
+        self._knowledge_items: dict[str, dict[str, Any]] = {}
+        self._initialize_knowledge_base_embeddings()
 
     async def generate_response(
         self,
@@ -58,28 +76,57 @@ class AIService:
                 history_length=len(conversation_history) if conversation_history else 0
             )
 
+            # Проверяем кэш на наличие готового ответа
+            cached_response = await cache_service.get_ai_response_cache(message, intent, entities)
+            if cached_response:
+                logger.info("Использован кэшированный AI ответ")
+                return AIResponse(**cached_response)
+
             # Если есть готовый шаблон для намерения, используем его
             if intent and intent in self._templates:
                 response = self._generate_template_response(intent, entities)
-                return AIResponse(
+                ai_response = AIResponse(
                     response=response,
                     confidence=0.9,
                     suggested_actions=self._get_suggested_actions(intent),
                     next_questions=self._get_next_questions(intent)
                 )
+                
+                # Кэшируем шаблонный ответ на 2 часа
+                await cache_service.set_ai_response_cache(
+                    message, intent, entities, ai_response.dict(), ttl_seconds=7200
+                )
+                
+                return ai_response
 
-            # Если есть информация в базе знаний
-            kb_response = self._search_knowledge_base(message, intent)
+            # Если есть информация в базе знаний (сначала пробуем embeddings поиск)
+            kb_response = await self._search_knowledge_base_embeddings(message, intent)
+            if not kb_response:
+                # Fallback на старый метод поиска по ключевым словам
+                kb_response = self._search_knowledge_base(message, intent)
+            
             if kb_response:
-                return AIResponse(
+                ai_response = AIResponse(
                     response=kb_response,
                     confidence=0.8,
                     suggested_actions=self._get_suggested_actions(intent)
                 )
+                
+                # Кэшируем ответ из базы знаний на 4 часа
+                await cache_service.set_ai_response_cache(
+                    message, intent, entities, ai_response.dict(), ttl_seconds=14400
+                )
+                
+                return ai_response
 
-            # Генерация ответа через LLM (заглушка)
+            # Генерация ответа через LLM
             llm_response = await self._generate_llm_response(
                 message, intent, entities, conversation_history, user_context
+            )
+            
+            # Кэшируем LLM ответ на 1 час
+            await cache_service.set_ai_response_cache(
+                message, intent, entities, llm_response.dict(), ttl_seconds=3600
             )
 
             return llm_response
@@ -153,12 +200,26 @@ class AIService:
     ) -> AIResponse:
         """Генерация ответа через LLM (OpenAI/YandexGPT)."""
         # Формируем промпт для LLM
-        self._build_system_prompt(intent)
-        self._build_user_prompt(message, entities, conversation_history)
+        system_prompt = self._build_system_prompt(intent)
+        user_prompt = self._build_user_prompt(message, entities, conversation_history)
 
-        # TODO: Здесь будет реальный вызов OpenAI/YandexGPT API
-        # Пока возвращаем заглушку
+        # Пробуем OpenAI GPT-4o-mini
+        if self._openai_client:
+            try:
+                response = await self._call_openai_api(system_prompt, user_prompt, intent)
+                return response
+            except Exception as e:
+                logger.error("Ошибка вызова OpenAI API", error=str(e))
+        
+        # Fallback на YandexGPT для русского языка
+        if self._yandex_gpt_available:
+            try:
+                response = await self._call_yandex_gpt_api(system_prompt, user_prompt, intent)
+                return response
+            except Exception as e:
+                logger.error("Ошибка вызова YandexGPT API", error=str(e))
 
+        # Последний fallback на предустановленные ответы
         response_text = self._generate_fallback_response(intent, message)
 
         return AIResponse(
@@ -308,3 +369,168 @@ class AIService:
                 "response": "На все товары действует гарантия производителя. При поломке обратитесь к нам с фотографиями и описанием проблемы."
             }
         ]
+
+    async def _call_openai_api(
+        self, 
+        system_prompt: str, 
+        user_prompt: str, 
+        intent: str | None
+    ) -> AIResponse:
+        """Вызов OpenAI GPT-4o-mini API."""
+        try:
+            # Определяем модель в зависимости от сложности запроса
+            model = "gpt-4o-mini" if intent in ["greeting", "goodbye"] else "gpt-4o-mini"
+            
+            response = await self._openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_tokens=500,
+                temperature=0.7,
+                top_p=0.9,
+                frequency_penalty=0.1,
+                presence_penalty=0.1
+            )
+            
+            response_text = response.choices[0].message.content.strip()
+            confidence = min(0.95, max(0.8, 0.9 if response.choices[0].finish_reason == "stop" else 0.8))
+            
+            return AIResponse(
+                response=response_text,
+                confidence=confidence,
+                suggested_actions=self._get_suggested_actions(intent),
+                next_questions=self._get_next_questions(intent)
+            )
+            
+        except Exception as e:
+            logger.error("Ошибка OpenAI API", error=str(e), intent=intent)
+            raise
+
+    async def _call_yandex_gpt_api(
+        self, 
+        system_prompt: str, 
+        user_prompt: str, 
+        intent: str | None
+    ) -> AIResponse:
+        """Вызов YandexGPT API для русскоязычных запросов."""
+        try:
+            import aiohttp
+            
+            url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+            headers = {
+                "Authorization": f"Api-Key {settings.YANDEX_GPT_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            
+            payload = {
+                "modelUri": f"gpt://{settings.YANDEX_CLOUD_FOLDER_ID}/yandexgpt-lite",
+                "completionOptions": {
+                    "stream": False,
+                    "temperature": 0.6,
+                    "maxTokens": 500
+                },
+                "messages": [
+                    {"role": "system", "text": system_prompt},
+                    {"role": "user", "text": user_prompt}
+                ]
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, headers=headers, json=payload) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        response_text = data["result"]["alternatives"][0]["message"]["text"]
+                        
+                        return AIResponse(
+                            response=response_text,
+                            confidence=0.85,
+                            suggested_actions=self._get_suggested_actions(intent),
+                            next_questions=self._get_next_questions(intent)
+                        )
+                    else:
+                        error_text = await response.text()
+                        logger.error("YandexGPT API ошибка", status=response.status, error=error_text)
+                        raise Exception(f"YandexGPT API ошибка: {response.status}")
+                        
+        except Exception as e:
+            logger.error("Ошибка YandexGPT API", error=str(e), intent=intent)
+            raise
+
+    def _initialize_knowledge_base_embeddings(self) -> None:
+        """Асинхронная инициализация embeddings для базы знаний."""
+        # Запускаем инициализацию в фоне
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Если event loop уже запущен, создаем task
+                asyncio.create_task(self._create_knowledge_embeddings())
+            else:
+                # Если event loop не запущен, запускаем синхронно
+                loop.run_until_complete(self._create_knowledge_embeddings())
+        except Exception as e:
+            logger.warning("Не удалось инициализировать embeddings", error=str(e))
+
+    async def _create_knowledge_embeddings(self) -> None:
+        """Создать embeddings индекс для базы знаний."""
+        try:
+            # Преобразуем знания в формат с ID
+            knowledge_with_ids = []
+            for i, item in enumerate(self._knowledge_base):
+                kb_item = {
+                    'id': str(i),
+                    'title': f"Вопрос {i+1}",
+                    'content': item['response'],
+                    'keywords': item['keywords']
+                }
+                knowledge_with_ids.append(kb_item)
+
+            # Создаем embeddings индекс
+            embeddings_dict, items_dict = await embeddings_service.create_knowledge_base_index(knowledge_with_ids)
+            
+            self._knowledge_embeddings = embeddings_dict
+            self._knowledge_items = items_dict
+            
+            logger.info("Embeddings индекс базы знаний создан", items_count=len(items_dict))
+            
+        except Exception as e:
+            logger.error("Ошибка создания embeddings индекса", error=str(e))
+
+    async def _search_knowledge_base_embeddings(
+        self, 
+        message: str, 
+        intent: str | None
+    ) -> str | None:
+        """Поиск в базе знаний с использованием embeddings."""
+        if not self._knowledge_embeddings or not embeddings_service._available:
+            return None
+
+        try:
+            # Поиск похожих элементов
+            similar_items = await embeddings_service.search_similar_knowledge(
+                query_text=message,
+                knowledge_embeddings=self._knowledge_embeddings,
+                knowledge_items=self._knowledge_items,
+                threshold=0.6,  # Порог сходства
+                top_k=1  # Берем только самый похожий
+            )
+
+            if similar_items and len(similar_items) > 0:
+                best_match = similar_items[0]
+                similarity_score = best_match.get('similarity_score', 0)
+                
+                logger.info(
+                    "Найден ответ через embeddings поиск",
+                    similarity=similarity_score,
+                    content_preview=best_match['content'][:100]
+                )
+                
+                return best_match['content']
+
+            return None
+
+        except Exception as e:
+            logger.error("Ошибка embeddings поиска", error=str(e))
+            return None
