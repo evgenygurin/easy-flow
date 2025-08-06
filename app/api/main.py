@@ -6,10 +6,13 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.dependencies import get_conversation_service, get_integration_service
 from app.api.routes import conversation, health, integration
 from app.core.config import settings
 from app.services.conversation_service import ConversationService
+from app.services.integration_service import IntegrationService
 from app.services.nlp_service import NLPService
+from app.services.repository_service import repository_service
 
 
 logger = structlog.get_logger()
@@ -20,15 +23,26 @@ async def lifespan(app: FastAPI):
     """Управление жизненным циклом приложения."""
     # Startup
     logger.info("Запуск AI Customer Support Platform")
+    
+    # Initialize database tables
+    if repository_service.available:
+        await repository_service.create_tables()
+        logger.info("Database tables initialized")
+    else:
+        logger.warning("Repository service not available - running without database")
 
     # Настройка dependency injection
     app.dependency_overrides[ConversationService] = get_conversation_service
+    app.dependency_overrides[IntegrationService] = get_integration_service
     app.dependency_overrides[NLPService] = get_nlp_service
 
     yield
 
     # Shutdown
     logger.info("Остановка AI Customer Support Platform")
+    if repository_service.available:
+        await repository_service.close()
+        logger.info("Database connections closed")
 
 
 # Создаем FastAPI приложение
@@ -51,10 +65,6 @@ app.add_middleware(
 )
 
 # Dependency Injection factories
-def get_conversation_service() -> ConversationService:
-    """Factory для ConversationService."""
-    return ConversationService()
-
 def get_nlp_service() -> NLPService:
     """Factory для NLPService."""
     return NLPService()

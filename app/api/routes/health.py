@@ -5,6 +5,8 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from app.services.repository_service import repository_service
+
 
 router = APIRouter()
 
@@ -25,10 +27,18 @@ async def health_check() -> HealthResponse:
     """
     checks = {}
 
-    # Проверка базы данных (заглушка)
+    # Проверка базы данных
     try:
-        # TODO: Добавить реальную проверку БД
-        checks["database"] = {"status": "healthy", "response_time_ms": 5}
+        start_time = time.time()
+        if repository_service.available:
+            is_healthy = await repository_service.health_check()
+            response_time_ms = int((time.time() - start_time) * 1000)
+            if is_healthy:
+                checks["database"] = {"status": "healthy", "response_time_ms": response_time_ms}
+            else:
+                checks["database"] = {"status": "unhealthy", "error": "Database connection failed"}
+        else:
+            checks["database"] = {"status": "unhealthy", "error": "Database not configured"}
     except Exception as e:
         checks["database"] = {"status": "unhealthy", "error": str(e)}
 
@@ -70,5 +80,11 @@ async def liveness_probe() -> dict[str, str]:
 @router.get("/readiness")
 async def readiness_probe() -> dict[str, str]:
     """Readiness probe для Kubernetes."""
-    # TODO: Добавить проверки готовности сервиса
-    return {"status": "ready"}
+    # Проверяем готовность сервисов
+    try:
+        if repository_service.available and await repository_service.health_check():
+            return {"status": "ready"}
+        else:
+            return {"status": "not_ready"}
+    except Exception:
+        return {"status": "not_ready"}
