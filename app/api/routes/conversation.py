@@ -62,6 +62,10 @@ class ChatResponse(BaseModel):
     requires_human: bool = Field(False, description="Требуется ли вмешательство человека")
     suggested_actions: list[str] | None = Field(None, description="Предлагаемые действия")
 
+    # Информация о conversation flow
+    current_state: str | None = Field(None, description="Текущее состояние диалога")
+    state_transitions: int | None = Field(None, description="Количество переходов между состояниями")
+
     @field_validator('confidence')
     @classmethod
     def validate_confidence(cls, v: float | None) -> float | None:
@@ -121,6 +125,10 @@ async def process_chat_message(
                 detail="Ошибка обработки диалога"
             )
 
+        # Получаем информацию о состоянии conversation flow
+        flow_state = await conversation_service.get_flow_session_state(session_id)
+        current_state = flow_state.get("current_state") if flow_state else None
+        state_transitions = flow_state.get("state_transitions") if flow_state else None
         return ChatResponse(
             message=conversation_result.response,
             session_id=session_id,
@@ -128,7 +136,9 @@ async def process_chat_message(
             entities=nlp_result.entities,
             confidence=nlp_result.confidence,
             requires_human=conversation_result.requires_human,
-            suggested_actions=conversation_result.suggested_actions
+            suggested_actions=conversation_result.suggested_actions,
+            current_state=current_state,
+            state_transitions=state_transitions
         )
 
     except HTTPException:
@@ -202,3 +212,135 @@ async def escalate_to_human(
             status_code=500,
             detail=f"Ошибка эскалации: {str(e)}"
         )
+
+
+# Conversation Flow Management Endpoints
+
+@router.get("/flow/sessions/{session_id}/state")
+async def get_flow_session_state(
+    session_id: str,
+    conversation_service: ConversationService = Depends()
+) -> dict[str, Any]:
+    """Получить состояние conversation flow сессии."""
+    try:
+        state = await conversation_service.get_flow_session_state(session_id)
+        if not state:
+            raise HTTPException(
+                status_code=404,
+                detail="Сессия не найдена"
+            )
+        return state
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка получения состояния сессии: {str(e)}"
+        ) from e
+
+
+@router.post("/flow/sessions/{session_id}/reset")
+async def reset_flow_session(
+    session_id: str,
+    conversation_service: ConversationService = Depends()
+) -> dict[str, str]:
+    """Сбросить conversation flow сессию."""
+    try:
+        success = await conversation_service.reset_flow_session(session_id)
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail="Сессия не найдена"
+            )
+        return {"status": "reset", "session_id": session_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка сброса сессии: {str(e)}"
+        ) from e
+
+
+class StateTransitionRequest(BaseModel):
+    """Запрос на принудительный переход состояния."""
+
+    state_name: str = Field(..., description="Название целевого состояния")
+    reason: str | None = Field(None, description="Причина принудительного перехода")
+
+
+@router.post("/flow/sessions/{session_id}/transition")
+async def force_flow_state_transition(
+    session_id: str,
+    request: StateTransitionRequest,
+    conversation_service: ConversationService = Depends()
+) -> dict[str, str]:
+    """Принудительный переход в состояние conversation flow."""
+    try:
+        success = await conversation_service.force_flow_state_transition(
+            session_id, request.state_name
+        )
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="Не удалось выполнить переход состояния"
+            )
+        return {
+            "status": "transitioned",
+            "session_id": session_id,
+            "new_state": request.state_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка перехода состояния: {str(e)}"
+        ) from e
+
+
+@router.get("/flow/metrics")
+async def get_flow_metrics(
+    conversation_service: ConversationService = Depends()
+) -> dict[str, Any]:
+    """Получить метрики conversation flow."""
+    try:
+        metrics = conversation_service.get_flow_metrics()
+        return metrics
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка получения метрик: {str(e)}"
+        ) from e
+
+
+class CleanupRequest(BaseModel):
+    """Запрос на очистку неактивных сессий."""
+
+    max_inactive_minutes: int = Field(
+        default=30,
+        ge=1,
+        le=1440,
+        description="Максимальное время неактивности в минутах (1-1440)"
+    )
+
+
+@router.post("/flow/cleanup")
+async def cleanup_inactive_flow_sessions(
+    request: CleanupRequest,
+    conversation_service: ConversationService = Depends()
+) -> dict[str, int]:
+    """Очистка неактивных conversation flow сессий."""
+    try:
+        cleaned_count = await conversation_service.cleanup_inactive_flow_sessions(
+            request.max_inactive_minutes
+        )
+        return {
+            "cleaned_sessions": cleaned_count,
+            "max_inactive_minutes": request.max_inactive_minutes
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка очистки сессий: {str(e)}"
+        ) from e

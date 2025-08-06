@@ -33,7 +33,7 @@ async def test_process_order_status_message(nlp_service: NLPService):
         user_id="test_user"
     )
 
-    assert result.intent == "order_status"
+    assert result.intent == "order_inquiry"
     assert result.entities is not None
     assert "order_number" in result.entities
     assert result.entities["order_number"] == "12345"

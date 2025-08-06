@@ -5,6 +5,7 @@ from typing import Any
 import structlog
 
 from app.models.conversation import NLPResult
+from app.services.nlp.pattern_recognition import PatternRecognitionService
 
 
 logger = structlog.get_logger()
@@ -14,7 +15,11 @@ class NLPService:
     """Сервис для обработки естественного языка."""
 
     def __init__(self) -> None:
-        # TODO: Инициализация моделей NLP
+        # Инициализация новой системы распознавания паттернов
+        self.pattern_recognition = PatternRecognitionService()
+        
+        # TODO: Инициализация дополнительных NLP моделей (spaCy, transformers)
+        # Старые паттерны оставляем для fallback
         self._intent_patterns: dict[str, list[str]] = self._load_intent_patterns()
         self._entity_patterns: dict[str, str] = self._load_entity_patterns()
 
@@ -49,11 +54,22 @@ class NLPService:
             # Определение языка
             language = self._detect_language(normalized_message)
 
-            # Распознавание намерений
-            intent, confidence = self._classify_intent(normalized_message)
+            # Распознавание намерений через новую систему паттернов
+            intent, confidence = self.pattern_recognition.classify_intent(normalized_message)
+            
+            # Fallback на старую систему если новая не дала результата
+            if not intent or confidence < 0.3:
+                intent_fallback, confidence_fallback = self._classify_intent(normalized_message)
+                if confidence_fallback > confidence:
+                    intent, confidence = intent_fallback, confidence_fallback
 
-            # Извлечение сущностей
-            entities = self._extract_entities(normalized_message, intent)
+            # Извлечение сущностей через новую систему паттернов
+            entities = self.pattern_recognition.extract_entities(normalized_message, intent)
+            
+            # Дополняем сущностями из старой системы
+            fallback_entities = self._extract_entities(normalized_message, intent)
+            if fallback_entities:
+                entities.update(fallback_entities)
 
             # Анализ эмоциональной окраски
             sentiment = self._analyze_sentiment(normalized_message)

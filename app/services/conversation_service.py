@@ -15,6 +15,7 @@ from app.models.conversation import (
     SessionContext,
 )
 from app.services.ai_service import AIService
+from app.services.flow.flow_service import ConversationFlowService
 
 
 logger = structlog.get_logger()
@@ -25,6 +26,7 @@ class ConversationService:
 
     def __init__(self) -> None:
         self.ai_service = AIService()
+        self.flow_service = ConversationFlowService()
         # TODO: Подключить к реальной БД
         self._sessions: dict[str, SessionContext] = {}
         self._conversations: dict[str, ConversationResponse] = {}
@@ -84,42 +86,76 @@ class ConversationService:
             context.entities = entities
             context.last_activity = datetime.now()
 
-            # Генерируем ответ через AI сервис
-            ai_response = await self.ai_service.generate_response(
-                message=message,
-                intent=intent,
-                entities=entities,
-                conversation_history=context.conversation_history,
-                user_context=context.user_preferences
-            )
+            # Обрабатываем через conversation flow (новая система состояний)
+            try:
+                flow_result = await self.flow_service.process_conversation_flow(
+                    user_id=user_id,
+                    session_id=session_id,
+                    message=message,
+                    platform=platform,
+                    intent=intent,
+                    entities=entities
+                )
+                
+                # Добавляем сообщение пользователя и ответ в историю
+                ai_message = MessageResponse(
+                    id=str(uuid.uuid4()),
+                    content=flow_result.response,
+                    message_type=MessageType.ASSISTANT,
+                    user_id=user_id,
+                    session_id=session_id,
+                    platform=platform,
+                    created_at=datetime.now()
+                )
+                context.conversation_history.append(ai_message)
+                
+                # Сохраняем обновленный контекст
+                self._sessions[session_id] = context
+                
+                return flow_result
+                
+            except Exception as flow_error:
+                logger.warning(
+                    "Ошибка в conversation flow, переходим на fallback",
+                    error=str(flow_error)
+                )
+                
+                # Fallback на старую логику AI сервиса
+                ai_response = await self.ai_service.generate_response(
+                    message=message,
+                    intent=intent,
+                    entities=entities,
+                    conversation_history=context.conversation_history,
+                    user_context=context.user_preferences
+                )
 
-            # Добавляем ответ AI в историю
-            ai_message = MessageResponse(
-                id=str(uuid.uuid4()),
-                content=ai_response.response,
-                message_type=MessageType.ASSISTANT,
-                user_id=user_id,
-                session_id=session_id,
-                platform=platform,
-                created_at=datetime.now()
-            )
-            context.conversation_history.append(ai_message)
+                # Добавляем ответ AI в историю
+                ai_message = MessageResponse(
+                    id=str(uuid.uuid4()),
+                    content=ai_response.response,
+                    message_type=MessageType.ASSISTANT,
+                    user_id=user_id,
+                    session_id=session_id,
+                    platform=platform,
+                    created_at=datetime.now()
+                )
+                context.conversation_history.append(ai_message)
 
-            # Сохраняем обновленный контекст
-            self._sessions[session_id] = context
+                # Сохраняем обновленный контекст
+                self._sessions[session_id] = context
 
-            # Проверяем необходимость эскалации
-            requires_human = await self._should_escalate_to_human(
-                intent, ai_response.confidence, context
-            )
+                # Проверяем необходимость эскалации
+                requires_human = await self._should_escalate_to_human(
+                    intent, ai_response.confidence, context
+                )
 
-            return ConversationResult(
-                response=ai_response.response,
-                requires_human=requires_human,
-                suggested_actions=ai_response.suggested_actions,
-                next_questions=ai_response.next_questions,
-                escalation_reason=None
-            )
+                return ConversationResult(
+                    response=ai_response.response,
+                    requires_human=requires_human,
+                    suggested_actions=ai_response.suggested_actions,
+                    next_questions=ai_response.next_questions,
+                    escalation_reason=None
+                )
 
         except Exception as e:
             logger.error(
@@ -251,3 +287,25 @@ class ConversationService:
             return True
 
         return False
+
+    # Методы для работы с conversation flow
+    
+    async def get_flow_session_state(self, session_id: str) -> dict[str, Any] | None:
+        """Получить состояние conversation flow сессии."""
+        return await self.flow_service.get_session_state(session_id)
+    
+    async def reset_flow_session(self, session_id: str) -> bool:
+        """Сбросить conversation flow сессию."""
+        return await self.flow_service.reset_session(session_id)
+    
+    async def force_flow_state_transition(self, session_id: str, state_name: str) -> bool:
+        """Принудительный переход в состояние conversation flow."""
+        return await self.flow_service.force_state_transition(session_id, state_name)
+    
+    def get_flow_metrics(self) -> dict[str, Any]:
+        """Получить метрики conversation flow."""
+        return self.flow_service.get_flow_metrics()
+    
+    async def cleanup_inactive_flow_sessions(self, max_inactive_minutes: int = 30) -> int:
+        """Очистка неактивных conversation flow сессий."""
+        return await self.flow_service.cleanup_inactive_sessions(max_inactive_minutes)

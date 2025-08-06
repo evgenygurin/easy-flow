@@ -1,0 +1,49 @@
+name: Claude Task Scheduler
+
+on:
+  workflow_dispatch:
+    inputs:
+      task_name:
+        description: 'Task name'
+        required: true
+        default: 'Scheduled Task'
+      delay_minutes:
+        description: 'Delay in minutes (0 = now)'
+        required: true
+        default: '0'
+      prompt:
+        description: 'What you want Claude to do'
+        required: true
+        type: string
+
+jobs:
+  schedule-task:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Wait
+        run: |
+          DELAY_MINUTES="${{ github.event.inputs.delay_minutes }}"
+          DELAY_SECONDS=$((DELAY_MINUTES * 60))
+          
+          if [ $DELAY_SECONDS -gt 0 ]; then
+            echo "⏳ Waiting $DELAY_MINUTES minutes..."
+            sleep $DELAY_SECONDS
+          fi
+          echo "✅ Executing task: ${{ github.event.inputs.task_name }}"
+
+      - name: Create Issue for Claude
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "Scheduled: ${{ github.event.inputs.task_name }}",
+              body: "@claude ${{ github.event.inputs.prompt }}",
+              labels: ["claude", "scheduled"]
+            });
+            console.log(`✅ Created issue #${issue.data.number}: ${issue.data.html_url}`);

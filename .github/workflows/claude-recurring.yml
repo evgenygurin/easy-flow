@@ -1,0 +1,28 @@
+name: Claude Recurring Tasks
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC - customize this cron expression as needed
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  recurring-tasks:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # Add more steps here to run your tasks
+      - name: Create Daily Review Issue
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: "🌙 Daily Review - " + new Date().toISOString().split('T')[0],
+              body: "@claude Please review recent commits and changes from the last 24 hours. Focus on code quality, potential bugs, and suggest improvements.",
+              labels: ["claude", "daily-review", "automated"]
+            });
