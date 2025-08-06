@@ -1,0 +1,1 @@
+"""Russian e-commerce platform adapters."""
