@@ -18,16 +18,22 @@ router = APIRouter()
 async def get_supported_platforms() -> list[str]:
     """Получить список поддерживаемых платформ интеграции."""
     return [
+        # Russian e-commerce platforms
         "wildberries",
         "ozon",
         "1c-bitrix",
         "insales",
+        # International e-commerce platforms
         "shopify",
         "woocommerce",
+        "bigcommerce",
+        "magento",
+        # Messaging platforms
         "telegram",
         "whatsapp",
         "vk",
-        "yandex-alice"
+        "yandex-alice",
+        "viber"
     ]
 
 
@@ -94,11 +100,22 @@ async def handle_webhook(
     """Обработка входящих webhook'ов от внешних платформ.
 
     Поддерживаемые платформы:
+    Russian e-commerce:
     - wildberries: новые заказы, изменения статусов
     - ozon: обновления товаров, заказы
+    - 1c-bitrix: обновления сделок, контактов
+    - insales: события заказов и товаров
+    
+    International e-commerce:
+    - shopify: заказы, продукты, клиенты
+    - woocommerce: заказы, продукты, клиенты
+    - bigcommerce: заказы, продукты, клиенты
+    - magento: заказы, продукты, клиенты
+    
+    Messaging platforms:
     - telegram: входящие сообщения
     - whatsapp: сообщения клиентов
-    - alice: команды голосового ассистента
+    - yandex-alice: команды голосового ассистента
     """
     try:
         result = await integration_service.process_webhook(platform, payload.dict())

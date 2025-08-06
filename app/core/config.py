@@ -34,9 +34,26 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Интеграции e-commerce
+    # Russian platforms
     WILDBERRIES_API_KEY: str | None = None
     OZON_API_KEY: str | None = None
     BITRIX_WEBHOOK_URL: str | None = None
+    INSALES_API_KEY: str | None = None
+    INSALES_PASSWORD: str | None = None
+    INSALES_SHOP_DOMAIN: str | None = None
+    
+    # International platforms
+    SHOPIFY_SHOP_DOMAIN: str | None = None
+    SHOPIFY_ACCESS_TOKEN: str | None = None
+    WOOCOMMERCE_BASE_URL: str | None = None
+    WOOCOMMERCE_CONSUMER_KEY: str | None = None
+    WOOCOMMERCE_CONSUMER_SECRET: str | None = None
+    BIGCOMMERCE_STORE_HASH: str | None = None
+    BIGCOMMERCE_ACCESS_TOKEN: str | None = None
+    MAGENTO_BASE_URL: str | None = None
+    MAGENTO_ACCESS_TOKEN: str | None = None
+    MAGENTO_USERNAME: str | None = None
+    MAGENTO_PASSWORD: str | None = None
 
     # Платежи
     YOOKASSA_SHOP_ID: str | None = None

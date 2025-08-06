@@ -199,18 +199,29 @@ class IntegrationService:
     def _is_platform_supported(self, platform: str) -> bool:
         """Проверка поддержки платформы."""
         supported_platforms = {
+            # Russian e-commerce platforms
             "wildberries", "ozon", "1c-bitrix", "insales",
-            "shopify", "woocommerce", "telegram", "whatsapp",
-            "vk", "yandex-alice", "viber"
+            # International e-commerce platforms
+            "shopify", "woocommerce", "bigcommerce", "magento",
+            # Messaging platforms
+            "telegram", "whatsapp", "vk", "yandex-alice", "viber"
         }
         return platform in supported_platforms
 
     async def _validate_credentials(self, platform: str, credentials: dict[str, str]) -> None:
         """Валидация учетных данных для платформы."""
         validation_rules = {
+            # Russian e-commerce platforms
             "wildberries": ["api_key"],
             "ozon": ["client_id", "api_key"],
             "1c-bitrix": ["webhook_url"],
+            "insales": ["api_key", "password", "shop_domain"],
+            # International e-commerce platforms  
+            "shopify": ["shop_domain", "access_token"],
+            "woocommerce": ["base_url", "consumer_key", "consumer_secret"],
+            "bigcommerce": ["store_hash", "access_token"],
+            "magento": ["base_url", "access_token"],
+            # Messaging platforms
             "telegram": ["bot_token"],
             "whatsapp": ["access_token"],
             "yandex-alice": ["skill_id", "oauth_token"]
@@ -227,12 +238,20 @@ class IntegrationService:
     def _setup_webhook_handlers(self) -> dict[str, Callable[[dict[str, Any]], Awaitable[str]]]:
         """Настройка обработчиков webhook для каждой платформы."""
         return {
+            # Russian e-commerce platforms
             "wildberries": self._handle_wildberries_webhook,
             "ozon": self._handle_ozon_webhook,
+            "1c-bitrix": self._handle_bitrix_webhook,
+            "insales": self._handle_insales_webhook,
+            # International e-commerce platforms
+            "shopify": self._handle_shopify_webhook,
+            "woocommerce": self._handle_woocommerce_webhook,
+            "bigcommerce": self._handle_bigcommerce_webhook,
+            "magento": self._handle_magento_webhook,
+            # Messaging platforms
             "telegram": self._handle_telegram_webhook,
             "whatsapp": self._handle_whatsapp_webhook,
-            "yandex-alice": self._handle_alice_webhook,
-            "1c-bitrix": self._handle_bitrix_webhook
+            "yandex-alice": self._handle_alice_webhook
         }
 
     async def _handle_wildberries_webhook(self, payload: dict[str, Any]) -> str:
@@ -323,4 +342,74 @@ class IntegrationService:
             deal_id = data.get("FIELDS", {}).get("ID")
             logger.info("Обновление сделки Bitrix", deal_id=deal_id)
 
+        return str(uuid.uuid4())
+    
+    async def _handle_insales_webhook(self, payload: dict[str, Any]) -> str:
+        """Обработка webhook от InSales."""
+        event_type = payload.get("event_type")
+        
+        if event_type == "order_created":
+            order_data = payload.get("data", {})
+            logger.info("Новый заказ InSales", order_id=order_data.get("id"))
+        
+        elif event_type == "order_updated":
+            order_data = payload.get("data", {})
+            logger.info("Обновление заказа InSales", order_id=order_data.get("id"))
+        
+        return str(uuid.uuid4())
+    
+    async def _handle_shopify_webhook(self, payload: dict[str, Any]) -> str:
+        """Обработка webhook от Shopify."""
+        event_type = payload.get("event_type")
+        
+        if event_type == "orders/create":
+            order_data = payload.get("data", {})
+            logger.info("Новый заказ Shopify", order_id=order_data.get("id"))
+        
+        elif event_type == "orders/paid":
+            order_data = payload.get("data", {})
+            logger.info("Заказ Shopify оплачен", order_id=order_data.get("id"))
+        
+        return str(uuid.uuid4())
+    
+    async def _handle_woocommerce_webhook(self, payload: dict[str, Any]) -> str:
+        """Обработка webhook от WooCommerce."""
+        event_type = payload.get("event_type")
+        
+        if event_type == "order.created":
+            order_data = payload.get("data", {})
+            logger.info("Новый заказ WooCommerce", order_id=order_data.get("id"))
+        
+        elif event_type == "order.completed":
+            order_data = payload.get("data", {})
+            logger.info("Заказ WooCommerce выполнен", order_id=order_data.get("id"))
+        
+        return str(uuid.uuid4())
+    
+    async def _handle_bigcommerce_webhook(self, payload: dict[str, Any]) -> str:
+        """Обработка webhook от BigCommerce."""
+        event_type = payload.get("scope")  # BigCommerce uses 'scope'
+        
+        if event_type == "store/order/created":
+            order_data = payload.get("data", {})
+            logger.info("Новый заказ BigCommerce", order_id=order_data.get("id"))
+        
+        elif event_type == "store/order/updated":
+            order_data = payload.get("data", {})
+            logger.info("Заказ BigCommerce обновлен", order_id=order_data.get("id"))
+        
+        return str(uuid.uuid4())
+    
+    async def _handle_magento_webhook(self, payload: dict[str, Any]) -> str:
+        """Обработка webhook от Magento."""
+        event_type = payload.get("event_type")
+        
+        if event_type == "sales_order_place_after":
+            order_data = payload.get("data", {})
+            logger.info("Новый заказ Magento", order_id=order_data.get("entity_id"))
+        
+        elif event_type == "sales_order_save_after":
+            order_data = payload.get("data", {})
+            logger.info("Заказ Magento обновлен", order_id=order_data.get("entity_id"))
+        
         return str(uuid.uuid4())
