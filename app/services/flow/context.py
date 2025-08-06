@@ -52,6 +52,7 @@ class FlowContext:
         Returns:
         -------
             StateResult: Результат обработки
+
         """
         try:
             # Получаем или создаем контекст сессии

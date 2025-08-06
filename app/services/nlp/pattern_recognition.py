@@ -30,6 +30,7 @@ class PatternRecognitionService:
         Returns:
         -------
             Tuple[Optional[str], float]: (интент, уверенность)
+
         """
         try:
             text_lower = text.lower().strip()
@@ -77,6 +78,7 @@ class PatternRecognitionService:
         Returns:
         -------
             Dict[str, Any]: Словарь извлеченных сущностей
+
         """
         try:
             entities = {}
@@ -305,10 +307,7 @@ class PatternRecognitionService:
             "была",
         }
 
-        if word.lower() in common_words:
-            return False
-
-        return True
+        return word.lower() not in common_words
 
     def _is_known_name(self, word: str) -> bool:
         """Проверка по словарю известных имен."""

@@ -1,18 +1,20 @@
 """Magento e-commerce platform integration adapter."""
+import contextlib
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import structlog
 
-from app.adapters.base import PlatformAdapter, APIResponse, SyncResult, RateLimitConfig
+from app.adapters.base import APIResponse, PlatformAdapter, RateLimitConfig, SyncResult
 from app.models.ecommerce import Customer, Order, Product
+
 
 logger = structlog.get_logger()
 
 
 class MagentoAdapter(PlatformAdapter):
     """Magento e-commerce platform integration adapter with REST/GraphQL hybrid."""
-    
+
     def __init__(
         self,
         base_url: str,
@@ -21,13 +23,14 @@ class MagentoAdapter(PlatformAdapter):
         api_version: str = "V1"
     ):
         """Initialize Magento adapter.
-        
+
         Args:
         ----
             base_url: Magento store base URL (e.g., 'https://myshop.com')
             admin_token: Magento admin access token
             use_graphql: Whether to use GraphQL API for complex queries
             api_version: Magento REST API version
+
         """
         super().__init__(
             api_key=admin_token,
@@ -39,11 +42,11 @@ class MagentoAdapter(PlatformAdapter):
                 burst_size=10
             )
         )
-        
+
         self.admin_token = admin_token
         self.use_graphql = use_graphql
         self.api_version = api_version
-        
+
         # Magento order status mapping
         self.order_status_mapping = {
             "pending": "pending",
@@ -57,16 +60,16 @@ class MagentoAdapter(PlatformAdapter):
             "fraud": "cancelled",
             "holded": "processing"
         }
-    
-    async def _get_auth_headers(self) -> Dict[str, str]:
+
+    async def _get_auth_headers(self) -> dict[str, str]:
         """Get authentication headers."""
         return {
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": f"Bearer {self.admin_token}"
         }
-    
-    async def _make_graphql_request(self, query: str, variables: Optional[Dict[str, Any]] = None) -> APIResponse:
+
+    async def _make_graphql_request(self, query: str, variables: dict[str, Any] | None = None) -> APIResponse:
         """Make a GraphQL request to Magento."""
         return await self._make_request(
             method="POST",
@@ -76,7 +79,7 @@ class MagentoAdapter(PlatformAdapter):
                 "variables": variables or {}
             }
         )
-    
+
     async def test_connection(self) -> APIResponse:
         """Test connection to Magento API."""
         try:
@@ -85,12 +88,12 @@ class MagentoAdapter(PlatformAdapter):
                 method="GET",
                 url=f"/rest/{self.api_version}/store/storeConfigs"
             )
-            
+
             if response.success:
                 logger.info("Magento connection test successful")
-            
+
             return response
-            
+
         except Exception as e:
             return APIResponse(
                 success=False,
@@ -98,14 +101,14 @@ class MagentoAdapter(PlatformAdapter):
                 status_code=0,
                 platform=self.platform_name
             )
-    
+
     async def sync_orders(self, limit: int = 100) -> SyncResult:
         """Sync orders from Magento."""
         start_time = datetime.now()
         processed = 0
         success = 0
         errors = []
-        
+
         try:
             # Get orders from Magento using REST API
             response = await self._make_request(
@@ -118,7 +121,7 @@ class MagentoAdapter(PlatformAdapter):
                     "searchCriteria[sortOrders][0][direction]": "DESC"
                 }
             )
-            
+
             if not response.success:
                 errors.append(f"Failed to fetch orders: {response.error}")
                 return SyncResult(
@@ -130,16 +133,16 @@ class MagentoAdapter(PlatformAdapter):
                     errors=errors,
                     duration_seconds=(datetime.now() - start_time).total_seconds()
                 )
-            
+
             orders_response = response.data if isinstance(response.data, dict) else {}
             orders_data = orders_response.get("items", [])
-            
+
             for order_data in orders_data:
                 processed += 1
                 try:
                     # Transform Magento order to internal Order model
                     order = await self._transform_order(order_data)
-                    
+
                     logger.info(
                         "Synchronized Magento order",
                         magento_order_id=order_data.get("entity_id"),
@@ -147,14 +150,14 @@ class MagentoAdapter(PlatformAdapter):
                         status=order.status
                     )
                     success += 1
-                    
+
                 except Exception as e:
                     error_msg = f"Failed to process order {order_data.get('entity_id')}: {str(e)}"
                     errors.append(error_msg)
-        
+
         except Exception as e:
             errors.append(f"Order sync failed: {str(e)}")
-        
+
         return SyncResult(
             platform=self.platform_name,
             operation="orders",
@@ -164,14 +167,14 @@ class MagentoAdapter(PlatformAdapter):
             errors=errors,
             duration_seconds=(datetime.now() - start_time).total_seconds()
         )
-    
+
     async def sync_products(self, limit: int = 100) -> SyncResult:
         """Sync products from Magento catalog."""
         start_time = datetime.now()
         processed = 0
         success = 0
         errors = []
-        
+
         try:
             if self.use_graphql:
                 # Use GraphQL for products with complex attributes
@@ -248,12 +251,12 @@ class MagentoAdapter(PlatformAdapter):
                     }
                 }
                 """
-                
+
                 response = await self._make_graphql_request(
-                    query, 
+                    query,
                     {"pageSize": min(limit, 100), "currentPage": 1}
                 )
-                
+
                 if not response.success:
                     errors.append(f"GraphQL query failed: {response.error}")
                     return SyncResult(
@@ -265,9 +268,9 @@ class MagentoAdapter(PlatformAdapter):
                         errors=errors,
                         duration_seconds=(datetime.now() - start_time).total_seconds()
                     )
-                
+
                 products_data = response.data.get("data", {}).get("products", {}).get("items", [])
-                
+
             else:
                 # Use REST API
                 response = await self._make_request(
@@ -278,7 +281,7 @@ class MagentoAdapter(PlatformAdapter):
                         "searchCriteria[currentPage]": 1
                     }
                 )
-                
+
                 if not response.success:
                     errors.append(f"Failed to fetch products: {response.error}")
                     return SyncResult(
@@ -290,16 +293,16 @@ class MagentoAdapter(PlatformAdapter):
                         errors=errors,
                         duration_seconds=(datetime.now() - start_time).total_seconds()
                     )
-                
+
                 products_response = response.data if isinstance(response.data, dict) else {}
                 products_data = products_response.get("items", [])
-            
+
             for product_data in products_data:
                 processed += 1
                 try:
                     # Transform Magento product to internal Product model
                     product = await self._transform_product(product_data, is_graphql=self.use_graphql)
-                    
+
                     logger.info(
                         "Synchronized Magento product",
                         magento_product_id=product_data.get("id"),
@@ -307,14 +310,14 @@ class MagentoAdapter(PlatformAdapter):
                         name=product.name
                     )
                     success += 1
-                    
+
                 except Exception as e:
                     error_msg = f"Failed to process product {product_data.get('id')}: {str(e)}"
                     errors.append(error_msg)
-        
+
         except Exception as e:
             errors.append(f"Product sync failed: {str(e)}")
-        
+
         return SyncResult(
             platform=self.platform_name,
             operation="products",
@@ -324,14 +327,14 @@ class MagentoAdapter(PlatformAdapter):
             errors=errors,
             duration_seconds=(datetime.now() - start_time).total_seconds()
         )
-    
+
     async def sync_customers(self, limit: int = 100) -> SyncResult:
         """Sync customers from Magento."""
         start_time = datetime.now()
         processed = 0
         success = 0
         errors = []
-        
+
         try:
             # Get customers from Magento
             response = await self._make_request(
@@ -344,7 +347,7 @@ class MagentoAdapter(PlatformAdapter):
                     "searchCriteria[sortOrders][0][direction]": "DESC"
                 }
             )
-            
+
             if not response.success:
                 errors.append(f"Failed to fetch customers: {response.error}")
                 return SyncResult(
@@ -356,30 +359,30 @@ class MagentoAdapter(PlatformAdapter):
                     errors=errors,
                     duration_seconds=(datetime.now() - start_time).total_seconds()
                 )
-            
+
             customers_response = response.data if isinstance(response.data, dict) else {}
             customers_data = customers_response.get("items", [])
-            
+
             for customer_data in customers_data:
                 processed += 1
                 try:
                     # Transform Magento customer to internal Customer model
                     customer = await self._transform_customer(customer_data)
-                    
+
                     logger.info(
                         "Synchronized Magento customer",
                         magento_customer_id=customer_data.get("id"),
                         customer_id=customer.customer_id
                     )
                     success += 1
-                    
+
                 except Exception as e:
                     error_msg = f"Failed to process customer {customer_data.get('id')}: {str(e)}"
                     errors.append(error_msg)
-        
+
         except Exception as e:
             errors.append(f"Customer sync failed: {str(e)}")
-        
+
         return SyncResult(
             platform=self.platform_name,
             operation="customers",
@@ -389,18 +392,18 @@ class MagentoAdapter(PlatformAdapter):
             errors=errors,
             duration_seconds=(datetime.now() - start_time).total_seconds()
         )
-    
-    async def handle_webhook(self, payload: Dict[str, Any], signature: Optional[str] = None) -> bool:
+
+    async def handle_webhook(self, payload: dict[str, Any], signature: str | None = None) -> bool:
         """Handle Magento webhook events."""
         try:
             # Magento webhook structure varies by event type
             # Events are configured via admin panel or API
-            
+
             event_type = payload.get("event_type") or payload.get("type")
             data = payload.get("data", payload)  # Data might be at root level
-            
+
             logger.info("Processing Magento webhook", event_type=event_type)
-            
+
             if event_type:
                 if "order" in event_type:
                     await self._handle_order_webhook(data, event_type)
@@ -410,50 +413,45 @@ class MagentoAdapter(PlatformAdapter):
                     await self._handle_customer_webhook(data, event_type)
                 else:
                     logger.warning("Unknown Magento webhook event", event_type=event_type)
-            else:
-                # Try to determine from data structure
-                if "entity_id" in data and "grand_total" in data:
-                    await self._handle_order_webhook(data, "order_update")
-                elif "entity_id" in data and "sku" in data:
-                    await self._handle_product_webhook(data, "product_update")
-                elif "id" in data and "email" in data:
-                    await self._handle_customer_webhook(data, "customer_update")
-            
+            # Try to determine from data structure
+            elif "entity_id" in data and "grand_total" in data:
+                await self._handle_order_webhook(data, "order_update")
+            elif "entity_id" in data and "sku" in data:
+                await self._handle_product_webhook(data, "product_update")
+            elif "id" in data and "email" in data:
+                await self._handle_customer_webhook(data, "customer_update")
+
             return True
-            
+
         except Exception as e:
             logger.error("Magento webhook processing failed", error=str(e))
             return False
-    
+
     def verify_webhook_signature(self, payload: bytes, signature: str, secret: str) -> bool:
         """Verify Magento webhook signature."""
         # Magento webhook signature verification varies by configuration
         # Implement based on your specific setup
         return self._verify_hmac_sha256(payload, signature, secret)
-    
-    async def _transform_order(self, order_data: Dict[str, Any]) -> Order:
+
+    async def _transform_order(self, order_data: dict[str, Any]) -> Order:
         """Transform Magento order to Order model."""
         from decimal import Decimal
-        
+
         order_id = str(order_data.get("entity_id", ""))
         status = self.order_status_mapping.get(order_data.get("status", ""), "pending")
-        
+
         # Parse dates
         created_at = datetime.now()
         if order_data.get("created_at"):
-            try:
+            with contextlib.suppress(Exception):
                 created_at = datetime.fromisoformat(order_data["created_at"].replace("Z", "+00:00"))
-            except:
-                pass
-        
+
         # Parse totals
         total_price = Decimal("0.00")
         if order_data.get("grand_total"):
-            try:
+            with contextlib.suppress(Exception):
                 total_price = Decimal(str(order_data["grand_total"]))
-            except:
-                pass
-        
+
         return Order(
             order_id=f"magento_{order_id}",
             customer_id=f"magento_{order_data.get('customer_id', 'guest')}",
@@ -464,42 +462,40 @@ class MagentoAdapter(PlatformAdapter):
             source="magento",
             notes=""
         )
-    
-    async def _transform_product(self, product_data: Dict[str, Any], is_graphql: bool = False) -> Product:
+
+    async def _transform_product(self, product_data: dict[str, Any], is_graphql: bool = False) -> Product:
         """Transform Magento product to Product model."""
         from decimal import Decimal
-        
+
         if is_graphql:
             # GraphQL format
             product_id = str(product_data.get("id", ""))
             name = product_data.get("name", "")
             description = product_data.get("description", {}).get("html", "")
-            
+
             # Get price from price_range
             price = Decimal("0.00")
             price_range = product_data.get("price_range", {})
             min_price = price_range.get("minimum_price", {})
             regular_price = min_price.get("regular_price", {})
-            
+
             if regular_price.get("value"):
-                try:
+                with contextlib.suppress(Exception):
                     price = Decimal(str(regular_price["value"]))
-                except:
-                    pass
-            
+
             # Get category
             categories = product_data.get("categories", [])
             category = categories[0].get("name", "") if categories else ""
-            
+
             # Stock status
             stock_status = product_data.get("stock_status", "")
             in_stock = stock_status == "IN_STOCK"
-            
+
         else:
             # REST API format
             product_id = str(product_data.get("id", ""))
             name = product_data.get("name", "")
-            
+
             # Get description from custom attributes
             description = ""
             custom_attributes = product_data.get("custom_attributes", [])
@@ -507,15 +503,13 @@ class MagentoAdapter(PlatformAdapter):
                 if attr.get("attribute_code") == "description":
                     description = attr.get("value", "")
                     break
-            
+
             # Parse price
             price = Decimal("0.00")
             if product_data.get("price"):
-                try:
+                with contextlib.suppress(Exception):
                     price = Decimal(str(product_data["price"]))
-                except:
-                    pass
-            
+
             # Get category from custom attributes
             category = ""
             for attr in custom_attributes:
@@ -524,10 +518,10 @@ class MagentoAdapter(PlatformAdapter):
                     if category_ids:
                         category = f"category_{category_ids[0]}"
                     break
-            
+
             # Stock status from extension attributes
             in_stock = True  # Default, would need inventory API for accurate data
-        
+
         return Product(
             product_id=f"magento_{product_id}",
             name=name,
@@ -538,19 +532,17 @@ class MagentoAdapter(PlatformAdapter):
             in_stock=in_stock,
             weight=product_data.get("weight")
         )
-    
-    async def _transform_customer(self, customer_data: Dict[str, Any]) -> Customer:
+
+    async def _transform_customer(self, customer_data: dict[str, Any]) -> Customer:
         """Transform Magento customer to Customer model."""
         customer_id = str(customer_data.get("id", ""))
-        
+
         # Parse creation date
         created_at = datetime.now()
         if customer_data.get("created_at"):
-            try:
+            with contextlib.suppress(Exception):
                 created_at = datetime.fromisoformat(customer_data["created_at"].replace("Z", "+00:00"))
-            except:
-                pass
-        
+
         return Customer(
             customer_id=f"magento_{customer_id}",
             first_name=customer_data.get("firstname", ""),
@@ -558,20 +550,20 @@ class MagentoAdapter(PlatformAdapter):
             email=customer_data.get("email"),
             created_at=created_at
         )
-    
-    async def _handle_order_webhook(self, order_data: Dict[str, Any], event_type: str):
+
+    async def _handle_order_webhook(self, order_data: dict[str, Any], event_type: str):
         """Handle order webhook event."""
         order_id = order_data.get("entity_id")
         logger.info("Magento order webhook", order_id=order_id, event_type=event_type)
         # TODO: Update internal order data
-    
-    async def _handle_product_webhook(self, product_data: Dict[str, Any], event_type: str):
+
+    async def _handle_product_webhook(self, product_data: dict[str, Any], event_type: str):
         """Handle product webhook event."""
         product_id = product_data.get("entity_id") or product_data.get("id")
         logger.info("Magento product webhook", product_id=product_id, event_type=event_type)
         # TODO: Update internal product data
-    
-    async def _handle_customer_webhook(self, customer_data: Dict[str, Any], event_type: str):
+
+    async def _handle_customer_webhook(self, customer_data: dict[str, Any], event_type: str):
         """Handle customer webhook event."""
         customer_id = customer_data.get("id")
         logger.info("Magento customer webhook", customer_id=customer_id, event_type=event_type)

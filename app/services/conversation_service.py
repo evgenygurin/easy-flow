@@ -54,6 +54,7 @@ class ConversationService:
         Returns:
         -------
             ConversationResult: Результат обработки диалога
+
         """
         try:
             logger.info(
@@ -96,7 +97,7 @@ class ConversationService:
                     intent=intent,
                     entities=entities
                 )
-                
+
                 # Добавляем сообщение пользователя и ответ в историю
                 ai_message = MessageResponse(
                     id=str(uuid.uuid4()),
@@ -108,18 +109,18 @@ class ConversationService:
                     created_at=datetime.now()
                 )
                 context.conversation_history.append(ai_message)
-                
+
                 # Сохраняем обновленный контекст
                 self._sessions[session_id] = context
-                
+
                 return flow_result
-                
+
             except Exception as flow_error:
                 logger.warning(
                     "Ошибка в conversation flow, переходим на fallback",
                     error=str(flow_error)
                 )
-                
+
                 # Fallback на старую логику AI сервиса
                 ai_response = await self.ai_service.generate_response(
                     message=message,
@@ -283,29 +284,26 @@ class ConversationService:
             return True
 
         # Много сообщений без разрешения проблемы
-        if len(context.conversation_history) > 10:
-            return True
-
-        return False
+        return len(context.conversation_history) > 10
 
     # Методы для работы с conversation flow
-    
+
     async def get_flow_session_state(self, session_id: str) -> dict[str, Any] | None:
         """Получить состояние conversation flow сессии."""
         return await self.flow_service.get_session_state(session_id)
-    
+
     async def reset_flow_session(self, session_id: str) -> bool:
         """Сбросить conversation flow сессию."""
         return await self.flow_service.reset_session(session_id)
-    
+
     async def force_flow_state_transition(self, session_id: str, state_name: str) -> bool:
         """Принудительный переход в состояние conversation flow."""
         return await self.flow_service.force_state_transition(session_id, state_name)
-    
+
     def get_flow_metrics(self) -> dict[str, Any]:
         """Получить метрики conversation flow."""
         return self.flow_service.get_flow_metrics()
-    
+
     async def cleanup_inactive_flow_sessions(self, max_inactive_minutes: int = 30) -> int:
         """Очистка неактивных conversation flow сессий."""
         return await self.flow_service.cleanup_inactive_sessions(max_inactive_minutes)

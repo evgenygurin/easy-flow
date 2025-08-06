@@ -1,18 +1,22 @@
 """Сервис для работы с базой данных."""
 from datetime import datetime, timedelta
-from typing import Any, Optional, Sequence
+from typing import Any
 
 import structlog
-from sqlalchemy import create_engine, select, func, text
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy import create_engine, func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.core.config import settings
+from app.models.conversation import ConversationStatus, MessageType, Platform
 from app.models.database import (
-    User, Conversation, Message, AIResponse, KnowledgeBaseItem, 
-    ConversationMetrics, IntegrationLog, Base
+    AIResponse,
+    Base,
+    Conversation,
+    KnowledgeBaseItem,
+    Message,
+    User,
 )
-from app.models.conversation import Platform, ConversationStatus, MessageType
 
 
 logger = structlog.get_logger()
@@ -32,13 +36,13 @@ class DatabaseService:
                 pool_pre_ping=True,
                 pool_recycle=3600
             )
-            
+
             self.async_session_maker = async_sessionmaker(
                 self.async_engine,
                 class_=AsyncSession,
                 expire_on_commit=False
             )
-            
+
             # Sync engine для миграций и административных задач
             self.sync_engine = create_engine(
                 settings.DATABASE_URL,
@@ -47,9 +51,9 @@ class DatabaseService:
                 max_overflow=10,
                 pool_pre_ping=True
             )
-            
+
             self.sync_session_maker = sessionmaker(self.sync_engine)
-            
+
             self._available = True
             logger.info("База данных инициализирована", url=settings.DATABASE_URL.split('@')[-1])
         else:
@@ -75,8 +79,8 @@ class DatabaseService:
             return False
 
     async def get_or_create_user(
-        self, 
-        external_id: str, 
+        self,
+        external_id: str,
         platform: Platform,
         metadata: dict[str, Any] | None = None
     ) -> User | None:
@@ -93,7 +97,7 @@ class DatabaseService:
                 )
                 result = await session.execute(stmt)
                 user = result.scalars().first()
-                
+
                 if user:
                     # Обновить метаданные если они изменились
                     if metadata and metadata != user.metadata:
@@ -101,7 +105,7 @@ class DatabaseService:
                         user.updated_at = datetime.utcnow()
                         await session.commit()
                     return user
-                
+
                 # Создать нового пользователя
                 user = User(
                     external_id=external_id,
@@ -109,22 +113,22 @@ class DatabaseService:
                     metadata=metadata or {},
                     preferences={}
                 )
-                
+
                 session.add(user)
                 await session.commit()
                 await session.refresh(user)
-                
+
                 logger.info("Создан новый пользователь", user_id=user.id, platform=platform.value)
                 return user
-                
+
         except Exception as e:
             logger.error("Ошибка получения/создания пользователя", error=str(e), external_id=external_id)
             return None
 
     async def create_conversation(
-        self, 
-        user_id: str, 
-        session_id: str, 
+        self,
+        user_id: str,
+        session_id: str,
         platform: Platform,
         initial_context: dict[str, Any] | None = None
     ) -> Conversation | None:
@@ -141,14 +145,14 @@ class DatabaseService:
                     status=ConversationStatus.ACTIVE.value,
                     context=initial_context or {}
                 )
-                
+
                 session.add(conversation)
                 await session.commit()
                 await session.refresh(conversation)
-                
+
                 logger.info("Создан новый диалог", conversation_id=conversation.id, user_id=user_id)
                 return conversation
-                
+
         except Exception as e:
             logger.error("Ошибка создания диалога", error=str(e), user_id=user_id)
             return None
@@ -188,29 +192,29 @@ class DatabaseService:
                     ai_model_used=ai_model_used,
                     response_time_ms=response_time_ms
                 )
-                
+
                 session.add(message)
-                
+
                 # Обновить время последней активности диалога
                 stmt = select(Conversation).where(Conversation.id == conversation_id)
                 result = await session.execute(stmt)
                 conversation = result.scalars().first()
-                
+
                 if conversation:
                     conversation.updated_at = datetime.utcnow()
-                
+
                 await session.commit()
                 await session.refresh(message)
-                
+
                 return message
-                
+
         except Exception as e:
             logger.error("Ошибка добавления сообщения", error=str(e), conversation_id=conversation_id)
             return None
 
     async def get_conversation_history(
-        self, 
-        conversation_id: str, 
+        self,
+        conversation_id: str,
         limit: int = 50
     ) -> list[Message]:
         """Получить историю сообщений диалога."""
@@ -227,16 +231,16 @@ class DatabaseService:
                 )
                 result = await session.execute(stmt)
                 messages = result.scalars().all()
-                
+
                 return list(reversed(messages))  # Возвращаем в хронологическом порядке
-                
+
         except Exception as e:
             logger.error("Ошибка получения истории диалога", error=str(e), conversation_id=conversation_id)
             return []
 
     async def get_user_conversations(
-        self, 
-        user_id: str, 
+        self,
+        user_id: str,
         limit: int = 20
     ) -> list[Conversation]:
         """Получить диалоги пользователя."""
@@ -253,9 +257,9 @@ class DatabaseService:
                 )
                 result = await session.execute(stmt)
                 conversations = result.scalars().all()
-                
+
                 return list(conversations)
-                
+
         except Exception as e:
             logger.error("Ошибка получения диалогов пользователя", error=str(e), user_id=user_id)
             return []
@@ -301,20 +305,20 @@ class DatabaseService:
                     escalated_to_human=escalated_to_human,
                     escalation_reason=escalation_reason
                 )
-                
+
                 session.add(ai_response)
                 await session.commit()
                 await session.refresh(ai_response)
-                
+
                 return ai_response
-                
+
         except Exception as e:
             logger.error("Ошибка записи лога AI ответа", error=str(e))
             return None
 
     async def search_knowledge_base(
-        self, 
-        keywords: list[str], 
+        self,
+        keywords: list[str],
         category: str | None = None,
         limit: int = 5
     ) -> list[KnowledgeBaseItem]:
@@ -328,39 +332,39 @@ class DatabaseService:
                 conditions = []
                 for keyword in keywords:
                     conditions.append(func.array_to_string(KnowledgeBaseItem.keywords, ' ').ilike(f'%{keyword}%'))
-                
+
                 stmt = select(KnowledgeBaseItem).where(
-                    KnowledgeBaseItem.is_active == True,
+                    KnowledgeBaseItem.is_active,
                     *conditions
                 )
-                
+
                 if category:
                     stmt = stmt.where(KnowledgeBaseItem.category == category)
-                
+
                 stmt = stmt.order_by(
                     KnowledgeBaseItem.priority.desc(),
                     KnowledgeBaseItem.usage_count.desc()
                 ).limit(limit)
-                
+
                 result = await session.execute(stmt)
                 items = result.scalars().all()
-                
+
                 # Обновить счетчики использования
                 for item in items:
                     item.usage_count += 1
                     item.last_used_at = datetime.utcnow()
-                
+
                 if items:
                     await session.commit()
-                
+
                 return list(items)
-                
+
         except Exception as e:
             logger.error("Ошибка поиска в базе знаний", error=str(e))
             return []
 
     async def get_conversation_metrics_summary(
-        self, 
+        self,
         days: int = 7
     ) -> dict[str, Any]:
         """Получить сводку метрик диалогов."""
@@ -370,24 +374,24 @@ class DatabaseService:
         try:
             async with self.async_session_maker() as session:
                 since_date = datetime.utcnow() - timedelta(days=days)
-                
+
                 # Общие метрики
                 total_conversations = await session.scalar(
                     select(func.count(Conversation.id))
                     .where(Conversation.created_at >= since_date)
                 )
-                
+
                 total_messages = await session.scalar(
                     select(func.count(Message.id))
                     .where(Message.created_at >= since_date)
                 )
-                
+
                 # AI метрики
                 avg_confidence = await session.scalar(
                     select(func.avg(AIResponse.confidence))
                     .where(AIResponse.created_at >= since_date)
                 )
-                
+
                 # Статистика по типам ответов
                 response_types = await session.execute(
                     select(
@@ -397,9 +401,9 @@ class DatabaseService:
                     .where(AIResponse.created_at >= since_date)
                     .group_by(AIResponse.response_type)
                 )
-                
+
                 response_type_stats = {row.response_type: row.count for row in response_types}
-                
+
                 return {
                     "period_days": days,
                     "total_conversations": total_conversations or 0,
@@ -407,7 +411,7 @@ class DatabaseService:
                     "average_ai_confidence": float(avg_confidence or 0.0),
                     "response_type_distribution": response_type_stats
                 }
-                
+
         except Exception as e:
             logger.error("Ошибка получения метрик диалогов", error=str(e))
             return {}

@@ -63,6 +63,7 @@ class IntegrationService:
         Returns:
         -------
             IntegrationResult: Результат подключения
+
         """
         try:
             logger.info("Подключение платформы", user_id=user_id, platform=platform)
@@ -141,6 +142,7 @@ class IntegrationService:
         Returns:
         -------
             WebhookResult: Результат обработки
+
         """
         try:
             logger.info("Обработка webhook", platform=platform, event_type=payload.get("event_type"))
@@ -257,13 +259,13 @@ class IntegrationService:
         self.security_manager.log_audit_event(
             platform="wildberries",
             user_id="webhook",
-            action="webhook_processing", 
+            action="webhook_processing",
             resource="webhook",
             method="POST",
             status_code=200,
             request_data={"event_type": event_type}
         )
-        
+
         return str(uuid.uuid4())
 
     async def _handle_ozon_webhook(self, payload: dict[str, Any]) -> str:

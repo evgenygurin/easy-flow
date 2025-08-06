@@ -1,18 +1,17 @@
 """Тесты для conversation flow системы."""
 from datetime import datetime
-from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from app.models.conversation import Platform
+from app.services.flow.context import FlowContext
 from app.services.flow.flow_service import ConversationFlowService
 from app.services.flow.states.base import StateResult
+from app.services.flow.states.hangup import HangupState
 from app.services.flow.states.hello import HelloState
 from app.services.flow.states.order import OrderState
 from app.services.flow.states.payment import PaymentState
 from app.services.flow.states.shipping import ShippingState
-from app.services.flow.states.hangup import HangupState
-from app.services.flow.context import FlowContext
 
 
 @pytest.fixture

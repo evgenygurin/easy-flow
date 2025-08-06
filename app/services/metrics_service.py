@@ -3,10 +3,16 @@ import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
-from typing import Any, Dict, List
+from typing import Any
 
 import structlog
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 from app.services.cache_service import cache_service
 
@@ -29,8 +35,8 @@ class MetricsService:
     """Сервис для сбора метрик производительности."""
 
     def __init__(self) -> None:
-        self._session_metrics: Dict[str, Dict[str, Any]] = {}
-        self._daily_metrics: Dict[str, Dict[str, Any]] = defaultdict(lambda: {
+        self._session_metrics: dict[str, dict[str, Any]] = {}
+        self._daily_metrics: dict[str, dict[str, Any]] = defaultdict(lambda: {
             'requests': 0,
             'successful_responses': 0,
             'cache_hits': 0,
@@ -50,7 +56,7 @@ class MetricsService:
         finally:
             duration = time.time() - start_time
             ai_response_time_seconds.labels(response_type=response_type).observe(duration)
-            
+
             # Обновляем дневные метрики
             today = datetime.now().strftime('%Y-%m-%d')
             self._daily_metrics[today]['total_response_time'] += duration
@@ -89,7 +95,7 @@ class MetricsService:
             intent=intent or 'unknown',
             response_type=response_type
         ).inc()
-        
+
         ai_confidence_score.labels(
             intent=intent or 'unknown',
             response_type=response_type
@@ -106,7 +112,7 @@ class MetricsService:
         daily_stats['requests'] += 1
         daily_stats['successful_responses'] += 1
         daily_stats['confidence_samples'].append(confidence)
-        
+
         if cache_hit:
             daily_stats['cache_hits'] += 1
         else:
@@ -126,12 +132,12 @@ class MetricsService:
                     'total_confidence': 0.0,
                     'response_types': defaultdict(int)
                 }
-            
+
             session_stats = self._session_metrics[session_id]
             session_stats['requests'] += 1
             session_stats['total_confidence'] += confidence
             session_stats['response_types'][response_type] += 1
-            
+
             if cache_hit:
                 session_stats['cache_hits'] += 1
 
@@ -148,14 +154,14 @@ class MetricsService:
         """Обновить счетчик активных диалогов."""
         active_conversations.set(count)
 
-    async def get_session_metrics(self, session_id: str) -> Dict[str, Any]:
+    async def get_session_metrics(self, session_id: str) -> dict[str, Any]:
         """Получить метрики сессии."""
         if session_id not in self._session_metrics:
             return {}
 
         session_stats = self._session_metrics[session_id]
         duration = (datetime.now() - session_stats['start_time']).total_seconds()
-        
+
         return {
             'session_id': session_id,
             'duration_seconds': duration,
@@ -167,18 +173,18 @@ class MetricsService:
             'escalation_reason': session_stats.get('escalation_reason')
         }
 
-    async def get_daily_metrics(self, days: int = 7) -> List[Dict[str, Any]]:
+    async def get_daily_metrics(self, days: int = 7) -> list[dict[str, Any]]:
         """Получить дневные метрики за последние N дней."""
         metrics = []
-        
+
         for i in range(days):
             date = (datetime.now() - timedelta(days=i)).strftime('%Y-%m-%d')
             daily_stats = self._daily_metrics[date]
-            
+
             cache_hit_rate = 0.0
             if daily_stats['requests'] > 0:
                 cache_hit_rate = daily_stats['cache_hits'] / daily_stats['requests']
-            
+
             average_response_time = 0.0
             if daily_stats['successful_responses'] > 0:
                 average_response_time = daily_stats['total_response_time'] / daily_stats['successful_responses']
@@ -192,17 +198,17 @@ class MetricsService:
                 'escalations': daily_stats['escalations'],
                 'average_confidence': daily_stats['average_confidence']
             })
-        
+
         return metrics
 
-    async def get_performance_summary(self) -> Dict[str, Any]:
+    async def get_performance_summary(self) -> dict[str, Any]:
         """Получить сводку производительности."""
         today = datetime.now().strftime('%Y-%m-%d')
         today_stats = self._daily_metrics[today]
-        
+
         # Кэш статистика
         cache_stats = await cache_service.get_cache_stats()
-        
+
         return {
             'today': {
                 'total_requests': today_stats['requests'],
@@ -225,19 +231,19 @@ class MetricsService:
         """Очистка старых сессионных метрик."""
         cutoff_time = datetime.now() - timedelta(hours=max_age_hours)
         removed_count = 0
-        
+
         sessions_to_remove = []
         for session_id, session_data in self._session_metrics.items():
             if session_data['start_time'] < cutoff_time:
                 sessions_to_remove.append(session_id)
-        
+
         for session_id in sessions_to_remove:
             del self._session_metrics[session_id]
             removed_count += 1
-        
+
         if removed_count > 0:
             logger.info("Очищены старые сессионные метрики", removed_count=removed_count)
-        
+
         return removed_count
 
     async def get_prometheus_metrics(self) -> str:

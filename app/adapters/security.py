@@ -4,30 +4,31 @@ import hmac
 import json
 import secrets
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import structlog
 from cryptography.fernet import Fernet
 from pydantic import BaseModel, Field
+
 
 logger = structlog.get_logger()
 
 
 class CredentialStorage(BaseModel):
     """Secure credential storage model."""
-    
+
     platform: str = Field(..., description="Platform name")
     user_id: str = Field(..., description="User ID")
     credentials: str = Field(..., description="Encrypted credentials")
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
-    expires_at: Optional[datetime] = Field(None, description="Credential expiration")
+    expires_at: datetime | None = Field(None, description="Credential expiration")
     is_active: bool = Field(default=True, description="Whether credentials are active")
 
 
 class AuditLog(BaseModel):
     """Audit log entry model."""
-    
+
     log_id: str = Field(..., description="Unique log entry ID")
     platform: str = Field(..., description="Platform name")
     user_id: str = Field(..., description="User ID")
@@ -35,24 +36,25 @@ class AuditLog(BaseModel):
     resource: str = Field(..., description="Resource accessed")
     method: str = Field(..., description="HTTP method")
     status_code: int = Field(..., description="Response status code")
-    request_data: Optional[Dict[str, Any]] = Field(None, description="Request data (sanitized)")
-    response_data: Optional[Dict[str, Any]] = Field(None, description="Response data (sanitized)")
-    ip_address: Optional[str] = Field(None, description="Client IP address")
-    user_agent: Optional[str] = Field(None, description="Client user agent")
+    request_data: dict[str, Any] | None = Field(None, description="Request data (sanitized)")
+    response_data: dict[str, Any] | None = Field(None, description="Response data (sanitized)")
+    ip_address: str | None = Field(None, description="Client IP address")
+    user_agent: str | None = Field(None, description="Client user agent")
     timestamp: datetime = Field(default_factory=datetime.now)
-    duration_ms: Optional[float] = Field(None, description="Request duration in milliseconds")
-    error: Optional[str] = Field(None, description="Error message if any")
+    duration_ms: float | None = Field(None, description="Request duration in milliseconds")
+    error: str | None = Field(None, description="Error message if any")
 
 
 class SecurityManager:
     """Security manager for handling credentials and audit logging."""
-    
-    def __init__(self, encryption_key: Optional[str] = None):
+
+    def __init__(self, encryption_key: str | None = None):
         """Initialize security manager.
-        
+
         Args:
         ----
             encryption_key: Base64-encoded encryption key. If None, generates a new one.
+
         """
         if encryption_key:
             self.fernet = Fernet(encryption_key.encode() if isinstance(encryption_key, str) else encryption_key)
@@ -64,21 +66,22 @@ class SecurityManager:
                 "Generated new encryption key. In production, store this securely!",
                 key=key.decode()
             )
-        
+
         # In-memory storage for demo - replace with secure database in production
-        self._credentials: Dict[str, CredentialStorage] = {}
-        self._audit_logs: List[AuditLog] = []
-    
-    def encrypt_credentials(self, credentials: Dict[str, Any]) -> str:
+        self._credentials: dict[str, CredentialStorage] = {}
+        self._audit_logs: list[AuditLog] = []
+
+    def encrypt_credentials(self, credentials: dict[str, Any]) -> str:
         """Encrypt credentials for secure storage.
-        
+
         Args:
         ----
             credentials: Dictionary of credentials to encrypt
-            
+
         Returns:
         -------
             str: Encrypted credentials string
+
         """
         try:
             # Convert to JSON and encrypt
@@ -88,17 +91,18 @@ class SecurityManager:
         except Exception as e:
             logger.error("Failed to encrypt credentials", error=str(e))
             raise
-    
-    def decrypt_credentials(self, encrypted_credentials: str) -> Dict[str, Any]:
+
+    def decrypt_credentials(self, encrypted_credentials: str) -> dict[str, Any]:
         """Decrypt credentials from secure storage.
-        
+
         Args:
         ----
             encrypted_credentials: Encrypted credentials string
-            
+
         Returns:
         -------
             Dict[str, Any]: Decrypted credentials dictionary
+
         """
         try:
             # Decrypt and parse JSON
@@ -107,31 +111,32 @@ class SecurityManager:
         except Exception as e:
             logger.error("Failed to decrypt credentials", error=str(e))
             raise
-    
+
     def store_credentials(
         self,
         platform: str,
         user_id: str,
-        credentials: Dict[str, Any],
-        expires_at: Optional[datetime] = None
+        credentials: dict[str, Any],
+        expires_at: datetime | None = None
     ) -> bool:
         """Store encrypted credentials.
-        
+
         Args:
         ----
             platform: Platform name
             user_id: User ID
             credentials: Credentials dictionary
             expires_at: Optional expiration datetime
-            
+
         Returns:
         -------
             bool: Success status
+
         """
         try:
             # Encrypt credentials
             encrypted_creds = self.encrypt_credentials(credentials)
-            
+
             # Create storage entry
             key = f"{platform}:{user_id}"
             storage_entry = CredentialStorage(
@@ -140,14 +145,14 @@ class SecurityManager:
                 credentials=encrypted_creds,
                 expires_at=expires_at
             )
-            
+
             # Update existing or create new
             if key in self._credentials:
                 storage_entry.created_at = self._credentials[key].created_at
                 storage_entry.updated_at = datetime.now()
-            
+
             self._credentials[key] = storage_entry
-            
+
             logger.info(
                 "Stored encrypted credentials",
                 platform=platform,
@@ -155,97 +160,100 @@ class SecurityManager:
                 expires_at=expires_at
             )
             return True
-            
+
         except Exception as e:
             logger.error("Failed to store credentials", error=str(e), platform=platform, user_id=user_id)
             return False
-    
-    def retrieve_credentials(self, platform: str, user_id: str) -> Optional[Dict[str, Any]]:
+
+    def retrieve_credentials(self, platform: str, user_id: str) -> dict[str, Any] | None:
         """Retrieve and decrypt credentials.
-        
+
         Args:
         ----
             platform: Platform name
             user_id: User ID
-            
+
         Returns:
         -------
             Optional[Dict[str, Any]]: Decrypted credentials or None if not found
+
         """
         try:
             key = f"{platform}:{user_id}"
-            
+
             if key not in self._credentials:
                 return None
-            
+
             storage_entry = self._credentials[key]
-            
+
             # Check if credentials are active
             if not storage_entry.is_active:
                 logger.warning("Inactive credentials requested", platform=platform, user_id=user_id)
                 return None
-            
+
             # Check expiration
             if storage_entry.expires_at and datetime.now() > storage_entry.expires_at:
                 logger.warning("Expired credentials requested", platform=platform, user_id=user_id)
                 return None
-            
+
             # Decrypt and return
             return self.decrypt_credentials(storage_entry.credentials)
-            
+
         except Exception as e:
             logger.error("Failed to retrieve credentials", error=str(e), platform=platform, user_id=user_id)
             return None
-    
+
     def delete_credentials(self, platform: str, user_id: str) -> bool:
         """Delete stored credentials.
-        
+
         Args:
         ----
             platform: Platform name
             user_id: User ID
-            
+
         Returns:
         -------
             bool: Success status
+
         """
         try:
             key = f"{platform}:{user_id}"
-            
+
             if key in self._credentials:
                 del self._credentials[key]
                 logger.info("Deleted credentials", platform=platform, user_id=user_id)
                 return True
-            
+
             return False
-            
+
         except Exception as e:
             logger.error("Failed to delete credentials", error=str(e), platform=platform, user_id=user_id)
             return False
-    
+
     def rotate_credentials(
         self,
         platform: str,
         user_id: str,
-        new_credentials: Dict[str, Any],
-        expires_at: Optional[datetime] = None
+        new_credentials: dict[str, Any],
+        expires_at: datetime | None = None
     ) -> bool:
         """Rotate (update) stored credentials.
-        
+
         Args:
         ----
             platform: Platform name
             user_id: User ID
             new_credentials: New credentials dictionary
             expires_at: Optional expiration datetime
-            
+
         Returns:
         -------
             bool: Success status
+
         """
         logger.info("Rotating credentials", platform=platform, user_id=user_id)
         return self.store_credentials(platform, user_id, new_credentials, expires_at)
-    
+
     def log_audit_event(
         self,
         platform: str,
@@ -254,15 +262,15 @@ class SecurityManager:
         resource: str,
         method: str,
         status_code: int,
-        request_data: Optional[Dict[str, Any]] = None,
-        response_data: Optional[Dict[str, Any]] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-        duration_ms: Optional[float] = None,
-        error: Optional[str] = None
+        request_data: dict[str, Any] | None = None,
+        response_data: dict[str, Any] | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        duration_ms: float | None = None,
+        error: str | None = None
     ):
         """Log an audit event.
-        
+
         Args:
         ----
             platform: Platform name
@@ -277,15 +285,16 @@ class SecurityManager:
             user_agent: Client user agent
             duration_ms: Request duration in milliseconds
             error: Error message if any
+
         """
         try:
             # Generate unique log ID
             log_id = secrets.token_hex(16)
-            
+
             # Sanitize sensitive data
             sanitized_request = self._sanitize_data(request_data) if request_data else None
             sanitized_response = self._sanitize_data(response_data) if response_data else None
-            
+
             # Create audit log entry
             audit_entry = AuditLog(
                 log_id=log_id,
@@ -302,10 +311,10 @@ class SecurityManager:
                 duration_ms=duration_ms,
                 error=error
             )
-            
+
             # Store audit log
             self._audit_logs.append(audit_entry)
-            
+
             # Log to structured logger
             logger.info(
                 "API audit event",
@@ -319,39 +328,40 @@ class SecurityManager:
                 duration_ms=duration_ms,
                 error=error
             )
-            
+
         except Exception as e:
             logger.error("Failed to log audit event", error=str(e))
-    
-    def _sanitize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _sanitize_data(self, data: dict[str, Any]) -> dict[str, Any]:
         """Sanitize sensitive data for audit logging.
-        
+
         Args:
         ----
             data: Data to sanitize
-            
+
         Returns:
         -------
             Dict[str, Any]: Sanitized data
+
         """
         if not isinstance(data, dict):
             return {}
-        
+
         # List of sensitive keys to redact
         sensitive_keys = {
             'password', 'token', 'secret', 'key', 'api_key', 'access_token',
             'refresh_token', 'client_secret', 'webhook_secret', 'auth',
             'authorization', 'credential', 'private'
         }
-        
+
         sanitized = {}
-        
+
         for key, value in data.items():
             key_lower = key.lower()
-            
+
             # Check if key contains sensitive information
             is_sensitive = any(sensitive_word in key_lower for sensitive_word in sensitive_keys)
-            
+
             if is_sensitive:
                 # Redact sensitive values
                 if isinstance(value, str) and value:
@@ -370,46 +380,47 @@ class SecurityManager:
             else:
                 # Keep non-sensitive values as-is
                 sanitized[key] = value
-        
+
         return sanitized
-    
+
     def get_audit_logs(
         self,
-        platform: Optional[str] = None,
-        user_id: Optional[str] = None,
-        action: Optional[str] = None,
+        platform: str | None = None,
+        user_id: str | None = None,
+        action: str | None = None,
         limit: int = 100
-    ) -> List[AuditLog]:
+    ) -> list[AuditLog]:
         """Retrieve audit logs with optional filtering.
-        
+
         Args:
         ----
             platform: Filter by platform
             user_id: Filter by user ID
             action: Filter by action
             limit: Maximum number of logs to return
-            
+
         Returns:
         -------
             List[AuditLog]: Filtered audit logs
+
         """
         filtered_logs = self._audit_logs
-        
+
         # Apply filters
         if platform:
             filtered_logs = [log for log in filtered_logs if log.platform == platform]
-        
+
         if user_id:
             filtered_logs = [log for log in filtered_logs if log.user_id == user_id]
-        
+
         if action:
             filtered_logs = [log for log in filtered_logs if log.action == action]
-        
+
         # Sort by timestamp (newest first) and limit
         filtered_logs.sort(key=lambda x: x.timestamp, reverse=True)
-        
+
         return filtered_logs[:limit]
-    
+
     def verify_webhook_signature(
         self,
         payload: bytes,
@@ -418,17 +429,18 @@ class SecurityManager:
         algorithm: str = "sha256"
     ) -> bool:
         """Verify webhook signature using HMAC.
-        
+
         Args:
         ----
             payload: Raw webhook payload
             signature: Signature to verify
             secret: Webhook secret
             algorithm: Hash algorithm (sha256, sha1, etc.)
-            
+
         Returns:
         -------
             bool: Whether signature is valid
+
         """
         try:
             # Remove common signature prefixes
@@ -437,7 +449,7 @@ class SecurityManager:
                 if clean_signature.startswith(prefix):
                     clean_signature = clean_signature[len(prefix):]
                     break
-            
+
             # Create expected signature
             hash_func = getattr(hashlib, algorithm)
             expected_signature = hmac.new(
@@ -445,45 +457,47 @@ class SecurityManager:
                 payload,
                 hash_func
             ).hexdigest()
-            
+
             # Use constant-time comparison
             return hmac.compare_digest(expected_signature, clean_signature)
-            
+
         except Exception as e:
             logger.error("Webhook signature verification failed", error=str(e))
             return False
-    
+
     def generate_webhook_secret(self) -> str:
         """Generate a secure webhook secret.
-        
-        Returns:
+
+        Returns
         -------
             str: Generated webhook secret
+
         """
         return secrets.token_urlsafe(32)
-    
-    def validate_input_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+
+    def validate_input_data(self, data: dict[str, Any]) -> dict[str, Any]:
         """Validate and sanitize input data.
-        
+
         Args:
         ----
             data: Input data to validate
-            
+
         Returns:
         -------
             Dict[str, Any]: Validated and sanitized data
+
         """
         if not isinstance(data, dict):
             raise ValueError("Input data must be a dictionary")
-        
+
         # Basic input validation and sanitization
         sanitized = {}
-        
+
         for key, value in data.items():
             # Validate key
             if not isinstance(key, str):
                 continue
-            
+
             # Basic sanitization
             if isinstance(value, str):
                 # Remove potentially dangerous characters
@@ -491,7 +505,7 @@ class SecurityManager:
                 # Limit string length
                 if len(value) > 10000:
                     value = value[:10000]
-            elif isinstance(value, (int, float)):
+            elif isinstance(value, int | float):
                 # Validate numeric ranges
                 if abs(value) > 1e15:  # Arbitrary large number limit
                     continue
@@ -502,7 +516,7 @@ class SecurityManager:
                 # Validate list items
                 if len(value) > 1000:  # Limit list size
                     value = value[:1000]
-                
+
                 validated_list = []
                 for item in value:
                     if isinstance(item, dict):
@@ -514,7 +528,7 @@ class SecurityManager:
                     else:
                         validated_list.append(item)
                 value = validated_list
-            
+
             sanitized[key] = value
-        
+
         return sanitized

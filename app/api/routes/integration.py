@@ -20,22 +20,22 @@ async def get_supported_platforms() -> list[str]:
     return [
         # Russian e-commerce platforms (Phase 1)
         "wildberries",
-        "ozon", 
+        "ozon",
         "1c-bitrix",
         "insales",
-        
-        # International e-commerce platforms (Phase 2) 
+
+        # International e-commerce platforms (Phase 2)
         "shopify",
         "woocommerce",
         "bigcommerce",
         "magento",
-        
+
         # Messaging platforms
         "telegram",
         "whatsapp",
         "vk",
         "viber",
-        
+
         # Voice assistants
         "yandex-alice"
     ]
@@ -104,19 +104,19 @@ async def handle_webhook(
     """Обработка входящих webhook'ов от внешних платформ.
 
     Поддерживаемые платформы:
-    
+
     Russian e-commerce:
     - wildberries: новые заказы, изменения статусов
     - ozon: обновления товаров, заказы, чат-сообщения
     - 1c-bitrix: обновления сделок, контактов, товаров
     - insales: заказы, товары, клиенты
-    
+
     International e-commerce:
     - shopify: заказы, товары, клиенты
     - woocommerce: WordPress интеграция
     - bigcommerce: полный спектр событий
     - magento: заказы и каталог
-    
+
     Messaging:
     - telegram: входящие сообщения
     - whatsapp: сообщения клиентов
@@ -140,18 +140,20 @@ async def sync_platform_data(
     integration_service: IntegrationService = Depends()
 ) -> dict[str, Any]:
     """Принудительная синхронизация данных с платформой.
-    
+
     Args:
+    ----
         platform_id: ID платформы для синхронизации
         user_id: ID пользователя
         operation: Тип операции синхронизации (orders, products, customers)
+
     """
     if operation not in ["orders", "products", "customers"]:
         raise HTTPException(
             status_code=400,
             detail="Операция должна быть: orders, products, или customers"
         )
-    
+
     try:
         result = await integration_service.sync_platform_data(user_id, platform_id, operation)
         return {
@@ -196,16 +198,15 @@ async def get_audit_logs(
 ) -> dict[str, Any]:
     """Получить журнал аудита интеграций."""
     try:
-        if limit > 1000:
-            limit = 1000
-            
+        limit = min(limit, 1000)
+
         audit_logs = integration_service.security_manager.get_audit_logs(
             platform=platform,
             user_id=user_id,
             action=action,
             limit=limit
         )
-        
+
         return {
             "logs": [log.dict() for log in audit_logs],
             "total": len(audit_logs),
@@ -235,12 +236,12 @@ async def sync_all_platforms(
             status_code=400,
             detail="Операция должна быть: orders, products, или customers"
         )
-    
+
     try:
         # Get user integrations
         integrations = await integration_service.get_user_integrations(user_id)
         results = []
-        
+
         # Sync each platform
         for integration in integrations:
             try:
@@ -263,14 +264,14 @@ async def sync_all_platforms(
                     "success": False,
                     "error": str(e)
                 })
-        
+
         return {
             "status": "completed",
             "operation": operation,
             "platforms_synced": len(results),
             "results": results
         }
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=500,

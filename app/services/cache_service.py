@@ -1,12 +1,10 @@
 """Сервис кэширования для AI ответов и сессий."""
-import json
 import hashlib
-from datetime import timedelta
-from typing import Any, Optional
+import json
+from typing import Any
 
 import redis.asyncio as redis
 import structlog
-from pydantic import BaseModel
 
 from app.core.config import settings
 
@@ -47,14 +45,14 @@ class CacheService:
         try:
             cache_key = self._generate_ai_cache_key(message, intent, entities)
             cached_data = await self._redis.get(cache_key)
-            
+
             if cached_data:
                 logger.debug("Найден кэшированный AI ответ", cache_key=cache_key)
                 return json.loads(cached_data)
-                
+
         except Exception as e:
             logger.error("Ошибка получения кэша AI ответа", error=str(e))
-        
+
         return None
 
     async def set_ai_response_cache(
@@ -78,7 +76,7 @@ class CacheService:
             )
             logger.debug("AI ответ сохранен в кэш", cache_key=cache_key, ttl=ttl_seconds)
             return True
-            
+
         except Exception as e:
             logger.error("Ошибка сохранения кэша AI ответа", error=str(e))
             return False
@@ -91,14 +89,14 @@ class CacheService:
         try:
             cache_key = f"session:{session_id}"
             cached_data = await self._redis.get(cache_key)
-            
+
             if cached_data:
                 logger.debug("Найден кэшированный контекст сессии", session_id=session_id)
                 return json.loads(cached_data)
-                
+
         except Exception as e:
             logger.error("Ошибка получения контекста сессии", error=str(e), session_id=session_id)
-        
+
         return None
 
     async def set_session_context(
@@ -120,7 +118,7 @@ class CacheService:
             )
             logger.debug("Контекст сессии сохранен в кэш", session_id=session_id, ttl=ttl_seconds)
             return True
-            
+
         except Exception as e:
             logger.error("Ошибка сохранения контекста сессии", error=str(e), session_id=session_id)
             return False
@@ -133,13 +131,13 @@ class CacheService:
         try:
             cache_key = f"kb:{query_hash}"
             cached_data = await self._redis.get(cache_key)
-            
+
             if cached_data:
                 return json.loads(cached_data)
-                
+
         except Exception as e:
             logger.error("Ошибка получения кэша базы знаний", error=str(e))
-        
+
         return None
 
     async def set_knowledge_base_cache(
@@ -160,7 +158,7 @@ class CacheService:
                 json.dumps(results, ensure_ascii=False, default=str)
             )
             return True
-            
+
         except Exception as e:
             logger.error("Ошибка сохранения кэша базы знаний", error=str(e))
             return False
@@ -173,14 +171,14 @@ class CacheService:
         try:
             pattern = f"session:*{user_id}*"
             keys = await self._redis.keys(pattern)
-            
+
             if keys:
                 deleted = await self._redis.delete(*keys)
                 logger.info("Кэш пользователя очищен", user_id=user_id, deleted_keys=deleted)
                 return deleted
-            
+
             return 0
-            
+
         except Exception as e:
             logger.error("Ошибка очистки кэша пользователя", error=str(e), user_id=user_id)
             return 0
@@ -200,7 +198,7 @@ class CacheService:
                 "keyspace_misses": info.get("keyspace_misses", 0),
                 "expired_keys": info.get("expired_keys", 0)
             }
-            
+
         except Exception as e:
             logger.error("Ошибка получения статистики кэша", error=str(e))
             return {"available": False, "error": str(e)}
@@ -231,7 +229,7 @@ class CacheService:
         }
         content_str = json.dumps(content, sort_keys=True, ensure_ascii=False)
         content_hash = hashlib.md5(content_str.encode()).hexdigest()
-        
+
         return f"ai_response:{content_hash}"
 
     async def close(self) -> None:

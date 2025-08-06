@@ -41,6 +41,7 @@ class ConversationFlowService:
         Returns:
         -------
             ConversationResult: Результат обработки
+
         """
         try:
             self.logger.info(

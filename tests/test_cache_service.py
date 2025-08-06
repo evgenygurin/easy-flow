@@ -1,7 +1,8 @@
 """Тесты для сервиса кэширования."""
 import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.cache_service import CacheService
 
@@ -38,11 +39,11 @@ class TestCacheService:
             "confidence": 0.9
         }
         mock_redis.get.return_value = json.dumps(cache_data, ensure_ascii=False)
-        
+
         result = await cache_service_with_mock_redis.get_ai_response_cache(
             "тестовое сообщение", "test_intent", {"entity": "value"}
         )
-        
+
         assert result == cache_data
         mock_redis.get.assert_called_once()
 
@@ -50,11 +51,11 @@ class TestCacheService:
     async def test_get_ai_response_cache_miss(self, cache_service_with_mock_redis, mock_redis):
         """Тест промаха кэша AI ответа."""
         mock_redis.get.return_value = None
-        
+
         result = await cache_service_with_mock_redis.get_ai_response_cache(
             "тестовое сообщение", "test_intent", {"entity": "value"}
         )
-        
+
         assert result is None
         mock_redis.get.assert_called_once()
 
@@ -66,7 +67,7 @@ class TestCacheService:
             "confidence": 0.8
         }
         mock_redis.setex.return_value = True
-        
+
         result = await cache_service_with_mock_redis.set_ai_response_cache(
             "тестовое сообщение",
             "test_intent",
@@ -74,14 +75,14 @@ class TestCacheService:
             response_data,
             ttl_seconds=3600
         )
-        
+
         assert result is True
         mock_redis.setex.assert_called_once()
-        
+
         # Проверяем аргументы вызова
         call_args = mock_redis.setex.call_args
         assert call_args[0][1] == 3600  # TTL
-        
+
         # Проверяем что данные сериализованы в JSON
         cached_json = call_args[0][2]
         parsed_data = json.loads(cached_json)
@@ -95,9 +96,9 @@ class TestCacheService:
             "last_activity": "2024-01-01T10:00:00"
         }
         mock_redis.get.return_value = json.dumps(session_data, default=str)
-        
+
         result = await cache_service_with_mock_redis.get_session_context("session123")
-        
+
         assert result == session_data
         mock_redis.get.assert_called_with("session:session123")
 
@@ -109,11 +110,11 @@ class TestCacheService:
             "platform": "web"
         }
         mock_redis.setex.return_value = True
-        
+
         result = await cache_service_with_mock_redis.set_session_context(
             "session123", session_data, ttl_seconds=1800
         )
-        
+
         assert result is True
         mock_redis.setex.assert_called_with(
             "session:session123",
@@ -126,9 +127,9 @@ class TestCacheService:
         """Тест очистки кэша пользователя."""
         mock_redis.keys.return_value = ["session:user1_session1", "session:user1_session2"]
         mock_redis.delete.return_value = 2
-        
+
         result = await cache_service_with_mock_redis.invalidate_user_cache("user1")
-        
+
         assert result == 2
         mock_redis.keys.assert_called_with("session:*user1*")
         mock_redis.delete.assert_called_once()
@@ -143,9 +144,9 @@ class TestCacheService:
             "keyspace_misses": 10,
             "expired_keys": 5
         }
-        
+
         stats = await cache_service_with_mock_redis.get_cache_stats()
-        
+
         assert stats["available"] is True
         assert stats["connected_clients"] == 5
         assert stats["used_memory"] == "1.2M"
@@ -155,9 +156,9 @@ class TestCacheService:
     async def test_health_check_success(self, cache_service_with_mock_redis, mock_redis):
         """Тест успешной проверки здоровья Redis."""
         mock_redis.ping.return_value = True
-        
+
         result = await cache_service_with_mock_redis.health_check()
-        
+
         assert result is True
         mock_redis.ping.assert_called_once()
 
@@ -165,9 +166,9 @@ class TestCacheService:
     async def test_health_check_failure(self, cache_service_with_mock_redis, mock_redis):
         """Тест неудачной проверки здоровья Redis."""
         mock_redis.ping.side_effect = Exception("Connection failed")
-        
+
         result = await cache_service_with_mock_redis.health_check()
-        
+
         assert result is False
 
     def test_generate_ai_cache_key_consistency(self, cache_service_with_mock_redis):
@@ -179,7 +180,7 @@ class TestCacheService:
         key2 = cache_service_with_mock_redis._generate_ai_cache_key(
             "тестовое сообщение", "intent1", {"key": "value"}
         )
-        
+
         assert key1 == key2
         assert key1.startswith("ai_response:")
 
@@ -194,7 +195,7 @@ class TestCacheService:
         key3 = cache_service_with_mock_redis._generate_ai_cache_key(
             "сообщение 1", "intent2", {"key": "value1"}
         )
-        
+
         assert key1 != key2
         assert key1 != key3
         assert key2 != key3
@@ -204,14 +205,14 @@ class TestCacheService:
         """Тест поведения при недоступном Redis."""
         with patch('app.services.cache_service.redis.from_url', side_effect=Exception("Connection failed")):
             service = CacheService()
-            
+
             # Все операции должны возвращать None/False при недоступном Redis
             result = await service.get_ai_response_cache("message", "intent", {})
             assert result is None
-            
+
             result = await service.set_ai_response_cache("message", "intent", {}, {})
             assert result is False
-            
+
             result = await service.health_check()
             assert result is False
 
@@ -220,11 +221,11 @@ class TestCacheService:
         """Тест обработки ошибок в операциях кэширования."""
         mock_redis.get.side_effect = Exception("Redis error")
         mock_redis.setex.side_effect = Exception("Redis error")
-        
+
         # Операции не должны падать при ошибках Redis
         result = await cache_service_with_mock_redis.get_ai_response_cache("message", "intent", {})
         assert result is None
-        
+
         result = await cache_service_with_mock_redis.set_ai_response_cache("message", "intent", {}, {})
         assert result is False
 
@@ -234,11 +235,11 @@ class TestCacheService:
         kb_results = [{"id": "1", "content": "test content"}]
         mock_redis.setex.return_value = True
         mock_redis.get.return_value = json.dumps(kb_results)
-        
+
         # Тест сохранения
         result = await cache_service_with_mock_redis.set_knowledge_base_cache("hash123", kb_results)
         assert result is True
-        
+
         # Тест получения
         result = await cache_service_with_mock_redis.get_knowledge_base_cache("hash123")
         assert result == kb_results

@@ -43,6 +43,7 @@ class ConversationState(ABC):
         Returns:
         -------
             StateResult: Результат входа в состояние
+
         """
 
     @abstractmethod
@@ -61,6 +62,7 @@ class ConversationState(ABC):
         Returns:
         -------
             StateResult: Результат обработки
+
         """
 
     async def exit(self, context: "StateContext") -> None:
@@ -69,6 +71,7 @@ class ConversationState(ABC):
         Args:
         ----
             context: Контекст состояния
+
         """
         self.logger.info("Выход из состояния", state=self.name)
 
@@ -82,6 +85,7 @@ class ConversationState(ABC):
         Returns:
         -------
             bool: Возможен ли переход
+
         """
         return True  # По умолчанию разрешены все переходы
 
@@ -95,6 +99,7 @@ class ConversationState(ABC):
         Returns:
         -------
             List[str]: Список доступных действий
+
         """
         return []
 
@@ -109,6 +114,7 @@ class ConversationState(ABC):
         Returns:
         -------
             bool: Валиден ли ввод
+
         """
         return bool(message and message.strip())
 
