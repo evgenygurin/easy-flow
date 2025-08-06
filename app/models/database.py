@@ -5,11 +5,11 @@ from typing import Any
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    """Base class for all database models."""
 
 
 class User(Base):
@@ -20,7 +20,7 @@ class User(Base):
     id: Mapped[str] = mapped_column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
     external_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     platform: Mapped[str] = mapped_column(String(50), nullable=False)
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=dict)
+    user_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=dict)
     preferences: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -59,7 +59,7 @@ class Message(Base):
     conversation_id: Mapped[str] = mapped_column(UUID(as_uuid=False), nullable=False, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     message_type: Mapped[str] = mapped_column(String(50), nullable=False)  # user, assistant, system
-    metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=dict)
+    message_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # NLP и AI данные
