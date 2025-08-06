@@ -10,7 +10,7 @@ on:
       delay_minutes:
         description: 'Delay in minutes (0 = now)'
         required: true
-        default: '0'
+        default: '20'
       prompt:
         description: 'What you want Claude to do'
         required: true
