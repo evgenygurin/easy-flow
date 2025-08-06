@@ -181,6 +181,28 @@ uv lock --upgrade
 
 ## 📚 API Документация
 
+### ✨ Новая Clean Controller Architecture
+
+API теперь использует чистую архитектуру контроллеров:
+
+```python
+# До: Бизнес-логика в маршрутах ❌
+@router.post("/chat")
+async def process_chat_message(request, service1, service2):
+    # 150+ строк бизнес-логики в маршруте
+    session_id = request.session_id or str(uuid.uuid4())
+    nlp_result = await nlp_service.process_message(...)
+    # ... сложная логика
+
+# После: Тонкий слой маршрутов ✅  
+@router.post("/chat")
+async def process_chat_message(
+    request: ChatRequest,
+    controller: ConversationController = Depends()
+) -> ChatResponse:
+    return await controller.process_chat_message(request)
+```
+
 ### Основные endpoints
 
 #### Чат с AI
@@ -191,8 +213,23 @@ Content-Type: application/json
 
 {
   "message": "Где мой заказ №12345?",
-  "user_id": "user123",
-  "platform": "web"
+  "user_id": "user123", 
+  "session_id": "optional-session-id",
+  "platform": "web",
+  "context": {}
+}
+```
+
+**Ответ:**
+```json
+{
+  "message": "Ваш заказ №12345 находится в доставке...",
+  "session_id": "generated-or-provided-id",
+  "intent": "order_status",
+  "entities": {"order_id": "12345"},
+  "confidence": 0.95,
+  "requires_human": false,
+  "current_state": "order_inquiry"
 }
 ```
 
@@ -202,6 +239,14 @@ Content-Type: application/json
 GET /api/v1/integration/platforms
 GET /api/v1/integration/connected?user_id=user123
 POST /api/v1/integration/connect
+DELETE /api/v1/integration/disconnect/{platform_id}
+```
+
+#### Синхронизация данных
+
+```http
+POST /api/v1/integration/sync/{platform_id}
+POST /api/v1/integration/sync-all
 ```
 
 #### Webhook'и
@@ -236,6 +281,30 @@ POST /api/v1/integration/webhook/{platform}
 - **Apple Siri** - iOS интеграция
 
 ## 🏗️ Архитектура
+
+Проект следует принципам **Clean Architecture** с четким разделением слоев:
+
+### Clean Architecture Layers
+
+```
+app/
+├── api/                    # 🌐 Presentation Layer
+│   ├── controllers/        # HTTP логика (новое!)
+│   ├── routes/            # Тонкие FastAPI маршруты
+│   └── dependencies.py    # Dependency Injection
+├── services/              # 💼 Business Logic Layer  
+│   ├── conversation_service.py
+│   ├── integration_service.py
+│   ├── nlp_service.py
+│   └── ai_service.py
+├── repositories/          # 💾 Data Access Layer
+│   ├── interfaces/        # Repository абстракции
+│   └── sqlalchemy/       # SQLAlchemy реализации  
+├── adapters/              # 🔌 External Integrations
+│   ├── russian/          # Российские платформы
+│   └── international/    # Международные платформы
+└── models/               # 📊 Domain Models
+```
 
 ### Микросервисы
 
@@ -457,6 +526,9 @@ spec:
 - [x] Интеграция с OpenAI/YandexGPT
 - [x] Поддержка Telegram и WhatsApp
 - [x] Интеграция с Wildberries и Ozon
+- [x] **Clean Controller Architecture** ✨
+- [x] Repository Pattern с интерфейсами
+- [x] Dependency Injection система
 - [ ] Веб-интерфейс для управления
 - [ ] Базовая аналитика
 
