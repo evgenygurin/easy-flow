@@ -25,38 +25,32 @@ dependencies = [
     "uvicorn[standard]>=0.24.0",
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
-    
     # Database
     "sqlalchemy>=2.0.23",
     "alembic>=1.13.1",
     "asyncpg>=0.29.0",
     "redis>=5.0.1",
-    
     # AI/ML
     "openai>=1.3.0",
     "langchain>=0.0.350",
     "sentence-transformers>=2.2.2",
-    
     # HTTP Client
     "httpx>=0.25.2",
     "aiohttp>=3.9.1",
-    
     # Authentication & Security
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
     "python-multipart>=0.0.6",
-    
     # Data Processing
     "pandas>=2.1.4",
     "numpy>=1.25.2",
-    
     # Monitoring
     "prometheus-client>=0.19.0",
     "structlog>=23.2.0",
-    
     # Russian Language Support
     "pymorphy2>=0.9.1",
     "razdel>=0.5.0",
+
     
     # Messaging Platforms
     "python-telegram-bot>=20.0",
@@ -69,6 +63,9 @@ dependencies = [
     
     # Monitoring
     "aioprometheus>=22.3.0",
+
+    "types-redis>=4.6.0.20241004",
+
 ]
 
 [project.optional-dependencies]
@@ -179,7 +176,7 @@ warn_unreachable = true
 strict_equality = true
 # Softer settings for initial phase
 check_untyped_defs = true
-warn_untyped_defs = true
+disallow_untyped_defs = false
 warn_incomplete_stub = true
 # Gradually enable stricter rules:
 # disallow_untyped_defs = true
@@ -197,6 +194,8 @@ module = [
     "prometheus_client.*",
     "pymorphy2.*",
     "razdel.*",
+    "numpy.*",
+    "redis.*",
 ]
 ignore_missing_imports = true
 
@@ -222,4 +221,11 @@ exclude_lines = [
     "def __repr__",
     "raise AssertionError",
     "raise NotImplementedError"
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-asyncio>=1.1.0",
+    "pytest-cov>=6.2.1",
 ]
