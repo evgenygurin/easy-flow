@@ -14,6 +14,10 @@ from app.adapters.russian.bitrix import BitrixAdapter
 from app.adapters.russian.insales import InSalesAdapter
 from app.adapters.international.shopify import ShopifyAdapter
 from app.adapters.international.woocommerce import WooCommerceAdapter
+from app.adapters.messaging.telegram import TelegramAdapter
+from app.adapters.messaging.whatsapp import WhatsAppAdapter
+from app.adapters.messaging.vk import VKAdapter
+from app.adapters.messaging.viber import ViberAdapter
 from app.models.integration import IntegrationResult, PlatformInfo
 from app.repositories.interfaces.integration_repository import IntegrationRepository
 
@@ -254,6 +258,55 @@ class IntegrationService:
                 consumer_secret=consumer_secret
             )
         
+        # Messaging platforms
+        elif platform_name == "telegram":
+            bot_token = credentials.get("bot_token")
+            if not bot_token:
+                raise ValueError("Bot token required for Telegram")
+            return TelegramAdapter(
+                bot_token=bot_token,
+                webhook_secret=config.get("webhook_secret"),
+                webhook_url=config.get("webhook_url")
+            )
+        
+        elif platform_name == "whatsapp":
+            access_token = credentials.get("access_token")
+            phone_number_id = credentials.get("phone_number_id")
+            business_account_id = credentials.get("business_account_id")
+            if not all([access_token, phone_number_id, business_account_id]):
+                raise ValueError("Access token, phone number ID, and business account ID required for WhatsApp")
+            return WhatsAppAdapter(
+                access_token=access_token,
+                phone_number_id=phone_number_id,
+                business_account_id=business_account_id,
+                webhook_verify_token=config.get("webhook_verify_token"),
+                app_secret=config.get("app_secret")
+            )
+        
+        elif platform_name == "vk":
+            access_token = credentials.get("access_token")
+            group_id = credentials.get("group_id")
+            if not access_token or not group_id:
+                raise ValueError("Access token and group ID required for VK")
+            return VKAdapter(
+                access_token=access_token,
+                group_id=group_id,
+                confirmation_token=config.get("confirmation_token"),
+                secret_key=config.get("secret_key")
+            )
+        
+        elif platform_name == "viber":
+            auth_token = credentials.get("auth_token")
+            bot_name = credentials.get("bot_name")
+            if not auth_token or not bot_name:
+                raise ValueError("Auth token and bot name required for Viber")
+            return ViberAdapter(
+                auth_token=auth_token,
+                bot_name=bot_name,
+                bot_avatar=config.get("bot_avatar"),
+                webhook_url=config.get("webhook_url")
+            )
+        
         else:
             raise ValueError(f"Unsupported platform: {platform_name}")
 
@@ -344,11 +397,18 @@ class IntegrationService:
     async def _validate_credentials(self, platform: str, credentials: dict[str, str]) -> None:
         """Валидация учетных данных для платформы."""
         validation_rules = {
+            # E-commerce platforms
             "wildberries": ["api_key"],
             "ozon": ["client_id", "api_key"],
             "1c-bitrix": ["webhook_url"],
+            "insales": ["api_key", "password", "domain"],
+            "shopify": ["shop_domain", "access_token"],
+            "woocommerce": ["base_url", "consumer_key", "consumer_secret"],
+            # Messaging platforms
             "telegram": ["bot_token"],
-            "whatsapp": ["access_token"],
+            "whatsapp": ["access_token", "phone_number_id", "business_account_id"],
+            "vk": ["access_token", "group_id"],
+            "viber": ["auth_token", "bot_name"],
             "yandex-alice": ["skill_id", "oauth_token"]
         }
 
@@ -363,12 +423,16 @@ class IntegrationService:
     def _setup_webhook_handlers(self) -> dict[str, Callable[[dict[str, Any]], Awaitable[str]]]:
         """Настройка обработчиков webhook для каждой платформы."""
         return {
+            # E-commerce platforms
             "wildberries": self._handle_wildberries_webhook,
             "ozon": self._handle_ozon_webhook,
+            "1c-bitrix": self._handle_bitrix_webhook,
+            # Messaging platforms  
             "telegram": self._handle_telegram_webhook,
             "whatsapp": self._handle_whatsapp_webhook,
-            "yandex-alice": self._handle_alice_webhook,
-            "1c-bitrix": self._handle_bitrix_webhook
+            "vk": self._handle_vk_webhook,
+            "viber": self._handle_viber_webhook,
+            "yandex-alice": self._handle_alice_webhook
         }
 
     async def _handle_wildberries_webhook(self, payload: dict[str, Any]) -> str:
@@ -450,6 +514,50 @@ class IntegrationService:
 
         # TODO: Обработать команду через conversation service
 
+        return str(uuid.uuid4())
+
+    async def _handle_vk_webhook(self, payload: dict[str, Any]) -> str:
+        """Обработка webhook от VK."""
+        event_type = payload.get("type")
+        
+        if event_type == "message_new":
+            # Новое сообщение
+            message_data = payload.get("object", {}).get("message", {})
+            user_id = message_data.get("from_id")
+            text = message_data.get("text", "")
+            
+            logger.info("Новое сообщение VK", user_id=user_id, text=text[:50])
+            
+            # TODO: Обработать сообщение через conversation service
+            
+        elif event_type == "confirmation":
+            # Подтверждение сервера (нужно для VK API)
+            return payload.get("group_id", "")
+        
+        return "ok"
+
+    async def _handle_viber_webhook(self, payload: dict[str, Any]) -> str:
+        """Обработка webhook от Viber."""
+        event_type = payload.get("event")
+        
+        if event_type == "message":
+            # Новое сообщение
+            message_data = payload.get("message", {})
+            user_data = payload.get("sender", {})
+            user_id = user_data.get("id")
+            text = message_data.get("text", "")
+            
+            logger.info("Новое сообщение Viber", user_id=user_id, text=text[:50])
+            
+            # TODO: Обработать сообщение через conversation service
+            
+        elif event_type == "subscribed":
+            # Пользователь подписался на бота
+            user_data = payload.get("user", {})
+            user_id = user_data.get("id")
+            
+            logger.info("Новый подписчик Viber", user_id=user_id)
+            
         return str(uuid.uuid4())
 
     async def _handle_bitrix_webhook(self, payload: dict[str, Any]) -> str:

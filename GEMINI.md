@@ -217,27 +217,260 @@ class ChatResponse(BaseModel):
 
 ## 📞 Поддержка каналов связи
 
-### Мессенджеры:
-- **Telegram** - популярный мессенджер
-- **WhatsApp Business** - бизнес коммуникации
-- **VK** - российская социальная сеть
-- **Viber** - мессенджер с бизнес-функциями
+### 📱 Мессенджеры - Полная интеграция:
+
+#### Поддерживаемые платформы:
+- **Telegram Bot API** - полная поддержка inline/reply клавиатур, медиа, стикеров
+- **WhatsApp Business Cloud API** - сообщения, медиа, шаблоны, интерактивные кнопки  
+- **VK Bot API** - клавиатуры, карусели, вложения, групповые чаты
+- **Viber Business API** - богатые медиа, клавиатуры, широкие возможности
+
+#### Архитектура мессенджеров:
+```
+MessagingController → MessagingService → PlatformAdapters
+                   ↓                   ↓
+            HTTP Validation      UnifiedMessage Model
+                   ↓                   ↓
+            Response Formatting  Platform-specific API calls
+```
+
+#### Унифицированный подход:
+- **UnifiedMessage** - единая модель для всех платформ
+- **Platform Adapters** - конвертация в специфичные форматы
+- **Webhook Processing** - автоматическая обработка входящих сообщений
+- **Rate Limiting** - соблюдение лимитов каждой платформы
+- **Statistics** - метрики доставки и производительности
 
 ### Голосовые ассистенты:
 - **Yandex Alice** - российский ассистент
 - **Amazon Alexa** - международный стандарт
 - **Google Assistant** - Google экосистема
 
+## 📱 MessagingController - Clean Architecture
+
+### Принципы реализации MessagingController:
+
+```python
+class MessagingController(BaseController):
+    """Контроллер мессенджеров - ТОЛЬКО HTTP логика"""
+    
+    def __init__(self, messaging_service: MessagingService):
+        super().__init__()
+        self.messaging_service = messaging_service
+    
+    async def send_message(self, request: SendMessageRequest) -> SendMessageResponse:
+        """Отправка сообщения - ТОЛЬКО валидация и делегирование"""
+        return await self.handle_request(
+            self._send_message_impl,
+            request
+        )
+    
+    async def _send_message_impl(self, request: SendMessageRequest) -> SendMessageResponse:
+        # ✅ HTTP валидация
+        validated_request = self._validate_send_message_request(request)
+        
+        # ✅ Создание доменной модели  
+        message = UnifiedMessage(
+            message_id=str(uuid.uuid4()),
+            platform=validated_request.platform,
+            chat_id=validated_request.chat_id,
+            text=validated_request.text
+        )
+        
+        # ✅ Делегирование в сервис
+        result = await self.messaging_service.send_message(
+            platform=validated_request.platform,
+            chat_id=validated_request.chat_id,
+            message=message
+        )
+        
+        # ✅ HTTP форматирование ответа
+        return SendMessageResponse(
+            success=result.success,
+            message_id=result.message_id
+        )
+```
+
+### MessagingService - Бизнес-логика:
+
+```python
+class MessagingService:
+    """Сервис мессенджеров - ВСЯ бизнес-логика"""
+    
+    def __init__(self, integration_repository: IntegrationRepository):
+        self.integration_repository = integration_repository
+        self._adapters: dict[str, MessagingAdapter] = {}
+    
+    async def send_message(
+        self, 
+        platform: str, 
+        chat_id: str, 
+        message: UnifiedMessage
+    ) -> DeliveryResult:
+        """Отправка сообщения - вся бизнес-логика"""
+        
+        # Получение адаптера платформы
+        adapter = self._adapters.get(platform)
+        if not adapter:
+            raise ValueError(f"Platform {platform} not registered")
+        
+        # Отправка через адаптер
+        result = await adapter.send_message(chat_id, message)
+        
+        return result
+    
+    async def process_webhook(
+        self,
+        platform: str,
+        payload: dict[str, Any]
+    ) -> WebhookProcessingResult:
+        """Обработка webhook - извлечение сообщений"""
+        
+        adapter = self._adapters.get(platform)
+        if not adapter:
+            raise ValueError(f"Platform {platform} not registered")
+        
+        # Извлечение сообщений
+        messages = await adapter.receive_webhook(payload)
+        
+        return WebhookProcessingResult(
+            event_id=str(uuid.uuid4()),
+            platform=platform,
+            messages=messages
+        )
+```
+
+### Platform Adapters - Паттерн Адаптера:
+
+```python
+class TelegramAdapter(MessagingAdapter):
+    """Telegram-специфичная реализация"""
+    
+    async def _send_platform_message(
+        self, 
+        chat_id: str, 
+        message: UnifiedMessage
+    ) -> DeliveryResult:
+        """Конвертация и отправка через Telegram API"""
+        
+        # Конвертация UnifiedMessage в Telegram формат
+        telegram_message = {
+            "chat_id": int(chat_id),
+            "text": message.text,
+            "parse_mode": "HTML"
+        }
+        
+        # Добавление inline клавиатуры
+        if message.inline_keyboard:
+            telegram_message["reply_markup"] = self._convert_inline_keyboard(
+                message.inline_keyboard
+            )
+        
+        # Отправка через Bot API
+        response = await self._make_request(
+            "POST", 
+            "sendMessage", 
+            data=telegram_message
+        )
+        
+        return DeliveryResult(
+            message_id=message.message_id,
+            platform_message_id=str(response["result"]["message_id"]),
+            success=True,
+            status=DeliveryStatus.SENT
+        )
+    
+    async def _extract_webhook_messages(
+        self, 
+        payload: dict[str, Any]
+    ) -> list[UnifiedMessage]:
+        """Извлечение сообщений из Telegram webhook"""
+        
+        messages = []
+        
+        if "message" in payload:
+            tg_msg = payload["message"]
+            
+            unified_message = UnifiedMessage(
+                message_id=str(uuid.uuid4()),
+                platform="telegram",
+                platform_message_id=str(tg_msg["message_id"]),
+                user_id=str(tg_msg["from"]["id"]),
+                chat_id=str(tg_msg["chat"]["id"]),
+                text=tg_msg.get("text"),
+                direction=MessageDirection.INBOUND
+            )
+            
+            messages.append(unified_message)
+        
+        return messages
+```
+
 ## 🔄 Webhook обработка
 
 ### Универсальная обработка webhook'ов:
 ```python
-async def handle_webhook(self, platform: str, payload: WebhookPayload):
-    """Обработка входящих webhook'ов от всех платформ"""
-    # Валидация платформы
-    # Получение обработчика
-    # Асинхронная обработка
-    # Возврат результата
+@router.post("/webhook/{platform}")
+async def process_webhook(
+    platform: str,
+    request: Request,
+    controller: MessagingController = Depends(get_messaging_controller)
+):
+    """Универсальный endpoint для всех платформ"""
+    
+    # Получение payload
+    payload = await request.json()
+    
+    # Определение подписи по платформе
+    signature = None
+    if platform == "telegram":
+        signature = request.headers.get("x-telegram-bot-api-secret-token")
+    elif platform == "whatsapp":
+        signature = request.headers.get("x-hub-signature-256")
+    
+    # Создание запроса
+    webhook_request = WebhookRequest(
+        platform=platform,
+        payload=payload,
+        signature=signature
+    )
+    
+    # Обработка через контроллер
+    return await controller.process_webhook(webhook_request)
+```
+
+### Автоматическая интеграция с диалогами:
+```python
+async def process_incoming_message(self, message: UnifiedMessage):
+    """Автоматическая обработка входящего сообщения"""
+    
+    # NLP анализ
+    nlp_result = await self.nlp_service.process_message(message.text)
+    
+    # Генерация ответа через AI
+    ai_response = await self.conversation_service.process_conversation(
+        user_id=message.user_id,
+        session_id=message.chat_id,  # Используем chat_id как session_id
+        message=message.text,
+        intent=nlp_result.intent,
+        entities=nlp_result.entities,
+        platform=message.platform
+    )
+    
+    # Отправка ответа обратно
+    response_message = UnifiedMessage(
+        message_id=str(uuid.uuid4()),
+        platform=message.platform,
+        chat_id=message.chat_id,
+        text=ai_response.message,
+        direction=MessageDirection.OUTBOUND
+    )
+    
+    await self.messaging_service.send_message(
+        platform=message.platform,
+        chat_id=message.chat_id,
+        message=response_message
+    )
 ```
 
 ## 📊 Метрики и аналитика

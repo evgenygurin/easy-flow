@@ -1,8 +1,10 @@
 """FastAPI dependency providers for services and controllers."""
 from app.api.controllers.conversation_controller import ConversationController
 from app.api.controllers.integration_controller import IntegrationController
+from app.api.controllers.messaging_controller import MessagingController
 from app.services.conversation_service import ConversationService
 from app.services.integration_service import IntegrationService
+from app.services.messaging_service import MessagingService
 from app.services.nlp_service import NLPService
 from app.services.repository_service import repository_service
 
@@ -43,4 +45,20 @@ def get_integration_controller() -> IntegrationController:
     """Get integration controller instance with service dependencies."""
     return IntegrationController(
         integration_service=get_integration_service()
+    )
+
+
+def get_messaging_service() -> MessagingService:
+    """Get messaging service instance with repository dependencies."""
+    if not repository_service.available:
+        raise RuntimeError("Repository service not available")
+    
+    service_factory = repository_service.get_service_factory()
+    return service_factory.create_messaging_service()
+
+
+def get_messaging_controller() -> MessagingController:
+    """Get messaging controller instance with service dependencies."""
+    return MessagingController(
+        messaging_service=get_messaging_service()
     )

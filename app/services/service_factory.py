@@ -2,6 +2,7 @@
 from app.repositories.repository_factory import RepositoryFactory
 from app.services.conversation_service import ConversationService
 from app.services.integration_service import IntegrationService
+from app.services.messaging_service import MessagingService
 
 
 class ServiceFactory:
@@ -28,5 +29,11 @@ class ServiceFactory:
     def create_integration_service(self) -> IntegrationService:
         """Create integration service with repository dependencies."""
         return IntegrationService(
+            integration_repository=self.repository_factory.create_integration_repository()
+        )
+
+    def create_messaging_service(self) -> MessagingService:
+        """Create messaging service with repository dependencies."""
+        return MessagingService(
             integration_repository=self.repository_factory.create_integration_repository()
         )
