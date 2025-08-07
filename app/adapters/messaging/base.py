@@ -247,8 +247,11 @@ class MessagingAdapter(PlatformAdapter):
             
             # Verify webhook signature if enabled
             if self.config.verify_webhooks and signature:
+                import json
+                # Use canonical JSON serialization for consistent signature verification
+                canonical_payload = json.dumps(payload, sort_keys=True, separators=(',', ':')).encode('utf-8')
                 if not self.verify_webhook_signature(
-                    payload=str(payload).encode(),
+                    payload=canonical_payload,
                     signature=signature,
                     secret=self.config.webhook_secret or ""
                 ):

@@ -118,32 +118,19 @@ class MessagingController(BaseController):
         )
 
     async def _send_message_impl(self, request: SendMessageRequest) -> SendMessageResponse:
-        """Implementation of message sending."""
-        # Validate request
+        """Implementation of message sending - HTTP logic only."""
+        # HTTP validation only
         validated_request = self._validate_send_message_request(request)
         
-        # Create unified message
-        message = UnifiedMessage(
-            message_id=str(uuid.uuid4()),
+        # Delegate all business logic to service
+        result = await self.messaging_service.send_message_from_request(
             platform=validated_request.platform,
-            platform_message_id="",  # Will be set by platform adapter
-            user_id="system",  # System-sent message
             chat_id=validated_request.chat_id,
-            message_type=validated_request.message_type,
-            direction=MessageDirection.OUTBOUND,
             text=validated_request.text,
+            message_type=validated_request.message_type,
             reply_to_message_id=validated_request.reply_to_message_id,
-            metadata={
-                "inline_keyboard": validated_request.inline_keyboard,
-                "reply_keyboard": validated_request.reply_keyboard
-            }
-        )
-        
-        # Send message via service
-        result = await self.messaging_service.send_message(
-            platform=validated_request.platform,
-            chat_id=validated_request.chat_id,
-            message=message,
+            inline_keyboard=validated_request.inline_keyboard,
+            reply_keyboard=validated_request.reply_keyboard,
             priority=validated_request.priority
         )
         

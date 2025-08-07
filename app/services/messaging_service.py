@@ -8,6 +8,9 @@ from pydantic import BaseModel, Field
 
 from app.adapters.messaging.base import MessagingAdapter
 from app.adapters.messaging.telegram import TelegramAdapter
+from app.adapters.messaging.whatsapp import WhatsAppAdapter
+from app.adapters.messaging.vk import VKAdapter
+from app.adapters.messaging.viber import ViberAdapter
 from app.models.messaging import (
     UnifiedMessage,
     DeliveryResult,
@@ -107,9 +110,48 @@ class MessagingService:
                     max_retries=config.retry_attempts
                 )
             
-            # Add other platforms here as they are implemented
-            # elif platform == "whatsapp":
-            #     return WhatsAppAdapter(...)
+            elif platform == "whatsapp":
+                access_token = config.credentials.get("access_token")
+                phone_number_id = config.credentials.get("phone_number_id")
+                if not access_token or not phone_number_id:
+                    raise ValueError("Access token and phone number ID required for WhatsApp")
+                
+                return WhatsAppAdapter(
+                    access_token=access_token,
+                    phone_number_id=phone_number_id,
+                    webhook_secret=config.webhook_secret,
+                    webhook_url=config.webhook_url,
+                    timeout=30,
+                    max_retries=config.retry_attempts
+                )
+            
+            elif platform == "vk":
+                access_token = config.credentials.get("access_token")
+                group_id = config.credentials.get("group_id")
+                if not access_token or not group_id:
+                    raise ValueError("Access token and group ID required for VK")
+                
+                return VKAdapter(
+                    access_token=access_token,
+                    group_id=group_id,
+                    webhook_secret=config.webhook_secret,
+                    webhook_url=config.webhook_url,
+                    timeout=30,
+                    max_retries=config.retry_attempts
+                )
+            
+            elif platform == "viber":
+                auth_token = config.credentials.get("auth_token")
+                if not auth_token:
+                    raise ValueError("Auth token required for Viber")
+                
+                return ViberAdapter(
+                    auth_token=auth_token,
+                    webhook_secret=config.webhook_secret,
+                    webhook_url=config.webhook_url,
+                    timeout=30,
+                    max_retries=config.retry_attempts
+                )
             
             else:
                 logger.warning("Unsupported messaging platform", platform=platform)
@@ -187,6 +229,86 @@ class MessagingService:
             # Return failure result
             return DeliveryResult(
                 message_id=message.message_id,
+                platform=platform,
+                status="failed",
+                success=False,
+                error_message=error_msg,
+                timestamp=datetime.now()
+            )
+
+    async def send_message_from_request(
+        self,
+        platform: str,
+        chat_id: str,
+        text: str | None = None,
+        message_type = None,
+        reply_to_message_id: str | None = None,
+        inline_keyboard: dict | None = None,
+        reply_keyboard: dict | None = None,
+        priority: int = 0
+    ) -> DeliveryResult:
+        """Send message from controller request - handles business logic.
+        
+        Args:
+        ----
+            platform: Platform name
+            chat_id: Target chat ID
+            text: Message text
+            message_type: Type of message
+            reply_to_message_id: Message ID to reply to
+            inline_keyboard: Inline keyboard data
+            reply_keyboard: Reply keyboard data
+            priority: Message priority
+            
+        Returns:
+        -------
+            DeliveryResult: Result of message sending
+        """
+        try:
+            # Import here to avoid circular imports
+            from app.models.messaging import MessageType, MessageDirection
+            
+            # Business logic: Create unified message
+            message = UnifiedMessage(
+                message_id=str(uuid.uuid4()),
+                platform=platform,
+                platform_message_id="",  # Will be set by platform adapter
+                user_id="system",  # System-sent message
+                chat_id=chat_id,
+                message_type=message_type or MessageType.TEXT,
+                direction=MessageDirection.OUTBOUND,
+                text=text,
+                reply_to_message_id=reply_to_message_id,
+                metadata={
+                    "inline_keyboard": inline_keyboard,
+                    "reply_keyboard": reply_keyboard
+                }
+            )
+            
+            # Business validation
+            if not platform or not platform.strip():
+                raise ValueError("Platform name is required")
+                
+            if not chat_id or not chat_id.strip():
+                raise ValueError("Chat ID is required")
+                
+            if message_type == MessageType.TEXT and (not text or not text.strip()):
+                raise ValueError("Text content is required for text messages")
+            
+            # Delegate to existing send_message method
+            return await self.send_message(platform, chat_id, message, priority)
+            
+        except Exception as e:
+            error_msg = f"Failed to send message from request: {str(e)}"
+            logger.error(
+                "Message sending from request failed",
+                platform=platform,
+                chat_id=chat_id,
+                error=error_msg
+            )
+            
+            return DeliveryResult(
+                message_id=str(uuid.uuid4()),
                 platform=platform,
                 status="failed",
                 success=False,
