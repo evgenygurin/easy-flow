@@ -7,6 +7,13 @@ from typing import Any
 import structlog
 from pydantic import BaseModel, Field
 
+from app.adapters.base import PlatformAdapter, PlatformManager, SyncResult as BaseSyncResult
+from app.adapters.russian.wildberries import WildberriesAdapter
+from app.adapters.russian.ozon import OzonAdapter
+from app.adapters.russian.bitrix import BitrixAdapter
+from app.adapters.russian.insales import InSalesAdapter
+from app.adapters.international.shopify import ShopifyAdapter
+from app.adapters.international.woocommerce import WooCommerceAdapter
 from app.models.integration import IntegrationResult, PlatformInfo
 from app.repositories.interfaces.integration_repository import IntegrationRepository
 
@@ -21,11 +28,8 @@ class WebhookResult(BaseModel):
     status: str = Field(default="processed", description="Статус обработки")
 
 
-class SyncResult(BaseModel):
-    """Результат синхронизации."""
-
-    records_updated: int = Field(..., description="Количество обновленных записей")
-    sync_time: datetime = Field(..., description="Время синхронизации")
+# Use SyncResult from adapters.base (imported as BaseSyncResult)
+SyncResult = BaseSyncResult
 
 
 class IntegrationService:
@@ -34,6 +38,8 @@ class IntegrationService:
     def __init__(self, integration_repository: IntegrationRepository) -> None:
         self.integration_repository = integration_repository
         self._webhook_handlers: dict[str, Callable[[dict[str, Any]], Awaitable[str]]] = self._setup_webhook_handlers()
+        self.platform_manager = PlatformManager()
+        self._adapters_cache: dict[str, PlatformAdapter] = {}
 
     async def get_user_integrations(self, user_id: str) -> list[PlatformInfo]:
         """Получить список подключенных интеграций для пользователя."""
@@ -158,41 +164,173 @@ class IntegrationService:
             logger.error("Ошибка обработки webhook", error=str(e), platform=platform)
             raise
 
-    async def sync_platform_data(self, user_id: str, platform_id: str) -> SyncResult:
-        """Синхронизация данных с платформой."""
-        try:
-            logger.info("Синхронизация данных", user_id=user_id, platform_id=platform_id)
+    async def _get_platform_adapter(self, platform_id: str) -> PlatformAdapter:
+        """Получить адаптер для платформы по ID интеграции."""
+        # Check cache first
+        if platform_id in self._adapters_cache:
+            return self._adapters_cache[platform_id]
 
-            # TODO: Реализовать реальную синхронизацию
-            records_updated = 42  # Заглушка
-            sync_time = datetime.now()
+        # Get integration info from repository
+        integration = await self.integration_repository.get_by_id(platform_id)
+        if not integration:
+            raise ValueError(f"Integration {platform_id} not found")
 
-            # Обновляем время последней синхронизации через repository
-            integration = await self.integration_repository.update_last_sync(
-                integration_id=platform_id,
-                sync_time=sync_time
+        # Create adapter based on platform name
+        adapter = await self._create_platform_adapter(
+            platform_name=integration.platform_name,
+            credentials=integration.credentials,
+            configuration=integration.configuration
+        )
+
+        # Cache the adapter
+        self._adapters_cache[platform_id] = adapter
+        return adapter
+
+    async def _create_platform_adapter(
+        self,
+        platform_name: str,
+        credentials: dict[str, str],
+        configuration: dict[str, Any] | None = None
+    ) -> PlatformAdapter:
+        """Создать адаптер для платформы."""
+        config = configuration or {}
+        
+        if platform_name == "wildberries":
+            api_key = credentials.get("api_key")
+            if not api_key:
+                raise ValueError("API key required for Wildberries")
+            return WildberriesAdapter(
+                api_key=api_key,
+                jwt_secret=config.get("jwt_secret")
             )
-            
-            if not integration:
-                raise ValueError(f"Integration {platform_id} not found")
+        
+        elif platform_name == "ozon":
+            client_id = credentials.get("client_id")
+            api_key = credentials.get("api_key")
+            if not client_id or not api_key:
+                raise ValueError("Client ID and API key required for Ozon")
+            return OzonAdapter(
+                client_id=client_id,
+                api_key=api_key
+            )
+        
+        elif platform_name == "1c-bitrix":
+            webhook_url = credentials.get("webhook_url")
+            if not webhook_url:
+                raise ValueError("Webhook URL required for 1C-Bitrix")
+            return BitrixAdapter(webhook_url=webhook_url)
+        
+        elif platform_name == "insales":
+            api_key = credentials.get("api_key")
+            password = credentials.get("password")
+            domain = credentials.get("domain")
+            if not all([api_key, password, domain]):
+                raise ValueError("API key, password, and domain required for InSales")
+            return InSalesAdapter(
+                api_key=api_key,
+                password=password,
+                domain=domain
+            )
+        
+        elif platform_name == "shopify":
+            shop_domain = credentials.get("shop_domain")
+            access_token = credentials.get("access_token")
+            if not shop_domain or not access_token:
+                raise ValueError("Shop domain and access token required for Shopify")
+            return ShopifyAdapter(
+                shop_domain=shop_domain,
+                access_token=access_token
+            )
+        
+        elif platform_name == "woocommerce":
+            base_url = credentials.get("base_url")
+            consumer_key = credentials.get("consumer_key")
+            consumer_secret = credentials.get("consumer_secret")
+            if not all([base_url, consumer_key, consumer_secret]):
+                raise ValueError("Base URL, consumer key, and consumer secret required for WooCommerce")
+            return WooCommerceAdapter(
+                base_url=base_url,
+                consumer_key=consumer_key,
+                consumer_secret=consumer_secret
+            )
+        
+        else:
+            raise ValueError(f"Unsupported platform: {platform_name}")
 
+    async def sync_platform_data(self, user_id: str, platform_id: str, operation: str = "orders") -> SyncResult:
+        """Синхронизация данных с платформой."""
+        start_time = datetime.now()
+        
+        try:
             logger.info(
-                "Синхронизация завершена",
+                "Начата синхронизация данных",
                 user_id=user_id,
                 platform_id=platform_id,
-                records_updated=records_updated
+                operation=operation
             )
 
-            return SyncResult(records_updated=records_updated, sync_time=sync_time)
+            # Validate operation
+            if operation not in ["orders", "products", "customers"]:
+                raise ValueError(f"Unsupported operation: {operation}")
+
+            # Get platform adapter
+            adapter = await self._get_platform_adapter(platform_id)
+            
+            # Perform sync based on operation type
+            if operation == "orders":
+                sync_result = await adapter.sync_orders(limit=1000)
+            elif operation == "products":
+                sync_result = await adapter.sync_products(limit=1000)
+            elif operation == "customers":
+                sync_result = await adapter.sync_customers(limit=1000)
+            else:
+                # This shouldn't happen due to validation above, but keeping for safety
+                raise ValueError(f"Unsupported operation: {operation}")
+
+            # Update last sync time in repository
+            await self.integration_repository.update_last_sync(
+                integration_id=platform_id,
+                sync_time=sync_result.timestamp
+            )
+
+            logger.info(
+                "Синхронизация завершена успешно",
+                user_id=user_id,
+                platform_id=platform_id,
+                operation=operation,
+                records_processed=sync_result.records_processed,
+                records_success=sync_result.records_success,
+                records_failed=sync_result.records_failed,
+                duration_seconds=sync_result.duration_seconds
+            )
+
+            return sync_result
 
         except Exception as e:
+            # Create error result
+            duration = (datetime.now() - start_time).total_seconds()
+            error_msg = str(e)
+            
             logger.error(
                 "Ошибка синхронизации",
-                error=str(e),
+                error=error_msg,
                 user_id=user_id,
-                platform_id=platform_id
+                platform_id=platform_id,
+                operation=operation,
+                duration_seconds=duration
             )
-            raise
+
+            # Return failed sync result instead of raising exception
+            return SyncResult(
+                platform="unknown",  # Will be updated by adapter if available
+                operation=operation,
+                records_processed=0,
+                records_success=0,
+                records_failed=0,
+                errors=[error_msg],
+                duration_seconds=duration,
+                timestamp=datetime.now()
+            )
 
     def _is_platform_supported(self, platform: str) -> bool:
         """Проверка поддержки платформы."""
@@ -325,3 +463,21 @@ class IntegrationService:
             logger.info("Обновление сделки Bitrix", deal_id=deal_id)
 
         return str(uuid.uuid4())
+
+    async def cleanup(self):
+        """Clean up resources and close adapter connections."""
+        try:
+            # Close all cached adapters
+            for adapter in self._adapters_cache.values():
+                await adapter.close()
+            
+            # Clear the cache
+            self._adapters_cache.clear()
+            
+            # Close platform manager adapters
+            await self.platform_manager.close_all()
+            
+            logger.info("Integration service cleanup completed")
+            
+        except Exception as e:
+            logger.error("Error during integration service cleanup", error=str(e))
