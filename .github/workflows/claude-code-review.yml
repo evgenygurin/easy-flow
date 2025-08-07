@@ -19,6 +19,7 @@ jobs:
     #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
     
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       pull-requests: read
@@ -42,14 +43,13 @@ jobs:
           
           # Direct prompt for automated review (no @claude mention needed)
           direct_prompt: |
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
-            - Performance considerations
-            - Security concerns
-            - Test coverage
+            Provide concise code review focusing on:
+            - Critical bugs and security issues
+            - Code quality violations
+            - Performance problems
+            - Missing tests for new features
             
-            Be constructive and helpful in your feedback.
+            Keep feedback brief and actionable. Limit response to essential issues only.
 
           # Optional: Use sticky comments to make Claude reuse the same comment on subsequent pushes to the same PR
           use_sticky_comment: true
@@ -69,7 +69,10 @@ jobs:
           #   'Please provide a thorough code review focusing on our coding standards and best practices.' }}
           
           # Optional: Add specific tools for running tests or linting
-          allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
+          allowed_tools: "Edit,MultiEdit,Glob,Grep,LS,Read,Write,Bash(make test),Bash(make lint),Bash(make format)"
+          
+          # Disable tools that can generate large outputs
+          disallowed_tools: "WebSearch,WebFetch"
           
           # Optional: Skip review for certain conditions
           # if: |
