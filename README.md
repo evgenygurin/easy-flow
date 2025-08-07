@@ -93,7 +93,17 @@ OZON_API_KEY=your-ozon-api-key
 
 # Мессенджеры
 TELEGRAM_BOT_TOKEN=your-bot-token
+TELEGRAM_WEBHOOK_SECRET=your-webhook-secret
+
 WHATSAPP_ACCESS_TOKEN=your-whatsapp-token
+WHATSAPP_PHONE_NUMBER_ID=your-phone-number-id
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=your-verify-token
+
+VK_ACCESS_TOKEN=your-vk-access-token
+VK_GROUP_ID=your-group-id
+VK_SECRET_KEY=your-secret-key
+
+VIBER_AUTH_TOKEN=your-viber-auth-token
 
 # Платежи
 YOOKASSA_SHOP_ID=your-shop-id
@@ -266,12 +276,171 @@ POST /api/v1/integration/webhook/{platform}
 - **Shopify** - международная платформа
 - **WooCommerce** - WordPress e-commerce
 
-#### Мессенджеры
+#### 📱 Интеграция с мессенджерами
 
-- **Telegram** - популярный мессенджер
-- **WhatsApp Business** - бизнес мессенджер
-- **VK** - российская соцсеть
-- **Viber** - мессенджер с бизнес функциями
+Платформа поддерживает полную интеграцию с популярными мессенджерами:
+
+##### Поддерживаемые платформы
+
+- **Telegram Bot API** - полная поддержка inline и reply клавиатур, медиа, файлов
+- **WhatsApp Business Cloud API** - сообщения, медиа, шаблоны, интерактивные кнопки
+- **VK Bot API** - сообщения, клавиатуры, карусели, вложения
+- **Viber Business API** - богатые медиа, клавиатуры, широкие возможности
+
+##### API Endpoints для мессенджеров
+
+```http
+# Отправка сообщений
+POST /api/v1/messaging/send
+{
+  "platform": "telegram",
+  "chat_id": "123456789",
+  "text": "Ваш заказ готов к получению!",
+  "message_type": "text",
+  "inline_keyboard": {
+    "buttons": [[{"text": "Отследить", "callback_data": "track_order"}]]
+  },
+  "priority": 5
+}
+
+# Обработка webhook'ов
+POST /api/v1/messaging/webhook/{platform}
+# Автоматическая обработка входящих сообщений
+
+# Получение контекста диалога
+GET /api/v1/messaging/context/{platform}/{chat_id}/{user_id}
+
+# Обновление контекста диалога
+PUT /api/v1/messaging/context/{platform}/{chat_id}/{user_id}
+
+# Статистика платформы
+GET /api/v1/messaging/stats/{platform}
+
+# Список поддерживаемых платформ
+GET /api/v1/messaging/platforms
+```
+
+##### Конфигурация мессенджеров
+
+```bash
+# Telegram Bot API
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+TELEGRAM_WEBHOOK_SECRET=your-secret-token
+TELEGRAM_WEBHOOK_URL=https://your-domain.com/api/v1/messaging/webhook/telegram
+
+# WhatsApp Business Cloud API  
+WHATSAPP_ACCESS_TOKEN=your-whatsapp-access-token
+WHATSAPP_WEBHOOK_VERIFY_TOKEN=your-verify-token
+WHATSAPP_WEBHOOK_SECRET=your-webhook-secret
+WHATSAPP_PHONE_NUMBER_ID=your-phone-number-id
+
+# VK Bot API
+VK_ACCESS_TOKEN=your-vk-access-token
+VK_GROUP_ID=your-group-id
+VK_SECRET_KEY=your-secret-key
+VK_CONFIRMATION_TOKEN=your-confirmation-token
+
+# Viber Bot API
+VIBER_AUTH_TOKEN=your-viber-auth-token
+VIBER_WEBHOOK_URL=https://your-domain.com/api/v1/messaging/webhook/viber
+```
+
+##### Примеры использования
+
+**Telegram интеграция:**
+
+```python
+# Отправка сообщения с inline клавиатурой
+await messaging_service.send_message(
+    platform="telegram",
+    chat_id="123456789",
+    message=UnifiedMessage(
+        text="Выберите действие:",
+        message_type=MessageType.TEXT,
+        inline_keyboard=InlineKeyboard(
+            buttons=[
+                [InlineKeyboardButton(text="📦 Мои заказы", callback_data="my_orders")],
+                [InlineKeyboardButton(text="🛒 Каталог", callback_data="catalog")],
+                [InlineKeyboardButton(text="🔍 Поиск", callback_data="search")]
+            ]
+        )
+    ),
+    priority=5
+)
+```
+
+**WhatsApp интеграция:**
+
+```python
+# Отправка медиа сообщения
+await messaging_service.send_message(
+    platform="whatsapp",
+    chat_id="71234567890",
+    message=UnifiedMessage(
+        text="Ваш QR-код для получения заказа:",
+        message_type=MessageType.IMAGE,
+        attachments=[
+            MessageAttachment(
+                file_type="image",
+                file_url="https://api.qrserver.com/v1/create-qr-code/?data=ORDER123",
+                file_name="qr_code.png"
+            )
+        ]
+    )
+)
+```
+
+**Универсальная обработка webhook'ов:**
+
+```python
+@app.post("/api/v1/messaging/webhook/{platform}")
+async def process_webhook(platform: str, request: Request):
+    # Автоматическая обработка входящих сообщений
+    # Поддержка всех платформ через единый интерфейс
+    payload = await request.json()
+    
+    # Извлечение и нормализация сообщений
+    messages = await messaging_service.process_webhook(
+        platform=platform,
+        payload=payload,
+        signature=request.headers.get("x-signature")
+    )
+    
+    # Обработка через AI и генерация ответов
+    for message in messages:
+        response = await conversation_service.process_message(message)
+        await messaging_service.send_message(
+            platform=platform,
+            chat_id=message.chat_id,
+            message=response
+        )
+```
+
+##### Возможности мессенджеров
+
+| Функция | Telegram | WhatsApp | VK | Viber |
+|---------|----------|----------|----| ------|
+| Текстовые сообщения | ✅ | ✅ | ✅ | ✅ |
+| Inline клавиатуры | ✅ | ✅ | ✅ | ✅ |
+| Reply клавиатуры | ✅ | ❌ | ✅ | ✅ |
+| Изображения | ✅ | ✅ | ✅ | ✅ |
+| Видео | ✅ | ✅ | ✅ | ✅ |
+| Документы | ✅ | ✅ | ✅ | ✅ |
+| Голосовые сообщения | ✅ | ✅ | ✅ | ❌ |
+| Стикеры | ✅ | ✅ | ✅ | ✅ |
+| Карусели | ❌ | ✅ | ✅ | ✅ |
+| Шаблоны | ❌ | ✅ | ❌ | ✅ |
+| Групповые чаты | ✅ | ✅ | ✅ | ❌ |
+| Webhook'и | ✅ | ✅ | ✅ | ✅ |
+
+##### Автоматизация и интеллект
+
+- **Автоматическая обработка** входящих сообщений
+- **NLP анализ** намерений и сущностей в сообщениях
+- **Контекстные ответы** на основе истории диалога
+- **Интеграция с AI** для генерации персонализированных ответов
+- **Эскалация** сложных вопросов к операторам
+- **Аналитика** эффективности каналов связи
 
 #### Голосовые ассистенты
 
