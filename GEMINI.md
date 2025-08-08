@@ -241,10 +241,306 @@ MessagingController → MessagingService → PlatformAdapters
 - **Rate Limiting** - соблюдение лимитов каждой платформы
 - **Statistics** - метрики доставки и производительности
 
-### Голосовые ассистенты:
-- **Yandex Alice** - российский ассистент
-- **Amazon Alexa** - международный стандарт
-- **Google Assistant** - Google экосистема
+### 🎤 Голосовые ассистенты - Полная интеграция:
+
+#### Реализованные платформы:
+- **Yandex Alice** ✅ - российский ассистент с полным циклом обработки
+
+#### В разработке:
+- **Amazon Alexa** 🔄 - международный стандарт
+- **Google Assistant** 🔄 - Google экосистема  
+- **Apple Siri** 🔄 - iOS интеграция
+
+#### Архитектура голосовых интеграций:
+```
+VoiceController → VoiceService → VoiceAdapters
+               ↓             ↓
+         HTTP Validation  VoiceMessage Model
+               ↓             ↓
+         Response Format   Platform-specific Processing
+```
+
+#### Unified Voice Processing:
+- **VoiceMessage** - унифицированная модель голосовых сообщений
+- **Voice Adapters** - конвертация в специфичные форматы платформ
+- **Intent Mapping** - маппинг голосовых намерений на бизнес-действия
+- **Session Management** - управление голосовыми сессиями
+- **Rich Content** - поддержка карточек и интерактивного контента
+
+## 🎤 VoiceController - Clean Architecture для голосовых ассистентов
+
+### Принципы реализации VoiceController:
+
+```python
+class VoiceController(BaseController):
+    """Контроллер голосовых ассистентов - ТОЛЬКО HTTP логика"""
+    
+    def __init__(self, voice_service: VoiceService):
+        super().__init__()
+        self.voice_service = voice_service
+    
+    async def process_webhook(self, request: VoiceWebhookRequest) -> VoiceWebhookResponse:
+        """Обработка voice webhook - ТОЛЬКО валидация и делегирование"""
+        return await self.handle_request(
+            self._process_webhook_impl,
+            request
+        )
+    
+    async def _process_webhook_impl(self, request: VoiceWebhookRequest) -> VoiceWebhookResponse:
+        # ✅ HTTP валидация
+        validated_request = self._validate_webhook_request(request)
+        
+        # ✅ Конвертация platform string в enum
+        platform = self._parse_voice_platform(validated_request.platform)
+        
+        # ✅ Делегирование в сервис
+        result = await self.voice_service.process_voice_webhook(
+            platform=platform,
+            request_data=validated_request.payload,
+            signature=validated_request.signature
+        )
+        
+        # ✅ HTTP форматирование ответа
+        return VoiceWebhookResponse(
+            success=result.success,
+            event_id=result.event_id,
+            platform=result.platform.value,
+            response=result.response
+        )
+```
+
+### VoiceService - Бизнес-логика голосовых интеграций:
+
+```python
+class VoiceService:
+    """Сервис голосовых ассистентов - ВСЯ бизнес-логика"""
+    
+    def __init__(self, integration_repository: IntegrationRepository):
+        self.integration_repository = integration_repository
+        self._adapters: dict[VoicePlatform, VoiceAdapter] = {}
+        self._intent_mappings: dict[str, VoiceIntentMapping] = {}
+    
+    async def process_voice_webhook(
+        self,
+        platform: VoicePlatform,
+        request_data: dict[str, Any],
+        signature: str | None = None
+    ) -> VoiceWebhookProcessingResult:
+        """Обработка voice webhook - вся бизнес-логика"""
+        
+        # Получение адаптера платформы
+        adapter = self._adapters.get(platform)
+        if not adapter:
+            raise ValueError(f"Voice platform {platform.value} not registered")
+        
+        # Обработка через адаптер
+        voice_response = await adapter.process_voice_request(request_data, signature)
+        
+        # Форматирование для платформы
+        formatted_response = await adapter.format_voice_response(voice_response)
+        
+        return VoiceWebhookProcessingResult(
+            event_id=str(uuid.uuid4()),
+            platform=platform,
+            success=True,
+            response=formatted_response
+        )
+    
+    async def process_voice_message(
+        self,
+        platform: VoicePlatform,
+        message: VoiceMessage,
+        session: VoiceSession
+    ) -> VoiceProcessingResult:
+        """Обработка голосового сообщения через бизнес-логику"""
+        
+        # Маппинг голосового намерения на бизнес-действие
+        business_action = None
+        if message.intent:
+            mapping = self._intent_mappings.get(message.intent.name)
+            if mapping and message.intent.confidence >= mapping.confidence_threshold:
+                business_action = mapping.business_action
+        
+        # Генерация ответа на основе бизнес-логики
+        response = await self._generate_business_response(
+            message, session, business_action
+        )
+        
+        return VoiceProcessingResult(
+            success=True,
+            response=response,
+            intent_confidence=message.intent.confidence if message.intent else None
+        )
+```
+
+### Voice Adapters - Паттерн Адаптера для голосовых платформ:
+
+```python
+class YandexAliceAdapter(VoiceAdapter):
+    """Yandex Alice специфичная реализация"""
+    
+    async def process_voice_request(
+        self,
+        request_data: dict[str, Any],
+        signature: str | None = None
+    ) -> VoiceResponse:
+        """Обработка Alice голосового запроса"""
+        
+        try:
+            # Верификация webhook подписи
+            if self.config.verify_webhooks and signature:
+                is_valid = await self.verify_request_signature(request_data, signature)
+                if not is_valid:
+                    raise ValueError("Invalid request signature")
+            
+            # Извлечение VoiceMessage из Alice формата
+            voice_message = await self.extract_voice_message(request_data)
+            
+            # Получение/создание голосовой сессии
+            session = await self._get_or_create_session(request_data)
+            
+            # Генерация ответа
+            response = await self._generate_response(voice_message, session)
+            
+            return response
+            
+        except Exception as e:
+            # Graceful error handling
+            return VoiceResponse(
+                text="Извините, произошла ошибка. Попробуйте ещё раз.",
+                speech="Извините, произошла ошибка. Попробуйте ещё раз.",
+                should_end_session=False
+            )
+    
+    async def extract_voice_message(self, request_data: dict[str, Any]) -> VoiceMessage:
+        """Конвертация Alice запроса в VoiceMessage"""
+        
+        request = request_data.get("request", {})
+        session = request_data.get("session", {})
+        
+        # Извлечение намерений и сущностей из Alice NLU
+        intent = None
+        entities = []
+        
+        if "nlu" in request and "intents" in request["nlu"]:
+            nlu_intents = request["nlu"]["intents"]
+            if nlu_intents:
+                # Берем намерение с наивысшим confidence
+                intent_name, intent_data = max(
+                    nlu_intents.items(),
+                    key=lambda x: x[1].get("slots", {}).get("confidence", 0.0)
+                )
+                
+                intent = VoiceIntent(
+                    name=intent_name,
+                    confidence=intent_data.get("slots", {}).get("confidence", 0.0),
+                    entities=intent_data.get("slots", {})
+                )
+        
+        return VoiceMessage(
+            platform=VoicePlatform.YANDEX_ALICE,
+            platform_message_id=request.get("request_id", ""),
+            session_id=session.get("session_id", ""),
+            user_id=session.get("user_id", ""),
+            text=request.get("original_utterance"),
+            intent=intent,
+            entities=entities,
+            supports_display=self._has_display_capability(request_data)
+        )
+    
+    async def format_voice_response(self, response: VoiceResponse) -> dict[str, Any]:
+        """Конвертация VoiceResponse в Alice формат"""
+        
+        alice_response = {
+            "version": "1.0",
+            "response": {
+                "end_session": response.should_end_session
+            }
+        }
+        
+        # Добавление текста и речи
+        if response.text:
+            alice_response["response"]["text"] = response.text
+        if response.speech:
+            alice_response["response"]["tts"] = response.speech
+        
+        # Добавление Rich Card для устройств с экраном
+        if response.card:
+            alice_response["response"]["card"] = {
+                "type": "BigImage",
+                "title": response.card.title,
+                "description": response.card.text or "",
+                "image_id": response.card.image_url
+            }
+            
+            # Добавление интерактивных кнопок
+            if response.card.buttons:
+                alice_response["response"]["buttons"] = [
+                    {
+                        "title": btn["title"],
+                        "payload": btn.get("payload", {}),
+                        "url": btn.get("url")
+                    }
+                    for btn in response.card.buttons[:5]  # Alice поддерживает до 5 кнопок
+                ]
+        
+        # Добавление session state
+        if response.session_attributes:
+            alice_response["session_state"] = {
+                "user": response.session_attributes
+            }
+        
+        return alice_response
+```
+
+### Voice Routes - Тонкий слой:
+
+```python
+# app/api/routes/voice.py
+
+@router.post("/webhook/{platform}", response_model=VoiceWebhookResponse)
+async def process_voice_webhook(
+    platform: str,
+    request: Request,
+    controller: VoiceController = Depends(get_voice_controller)
+) -> VoiceWebhookResponse:
+    """Обработка голосового webhook - делегирование контроллеру"""
+    payload = await request.json()
+    signature = request.headers.get("X-Hub-Signature")
+    
+    webhook_request = VoiceWebhookRequest(
+        platform=platform,
+        payload=payload,
+        signature=signature
+    )
+    
+    return await controller.process_webhook(webhook_request)
+
+@router.post("/alice", response_model=dict[str, Any])
+async def alice_webhook(
+    request: Request,
+    controller: VoiceController = Depends(get_voice_controller)
+) -> dict[str, Any]:
+    """Yandex Alice специальный endpoint"""
+    payload = await request.json()
+    
+    webhook_request = VoiceWebhookRequest(
+        platform="yandex_alice",
+        payload=payload,
+        signature=request.headers.get("X-Hub-Signature")
+    )
+    
+    result = await controller.process_webhook(webhook_request)
+    
+    # Возврат Alice-специфичного формата
+    return result.response if result.success else {
+        "version": "1.0",
+        "response": {
+            "text": "Извините, произошла ошибка. Попробуйте позже.",
+            "end_session": True
+        }
+    }
+```
 
 ## 📱 MessagingController - Clean Architecture
 

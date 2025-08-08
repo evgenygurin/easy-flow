@@ -6,13 +6,14 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.dependencies import get_conversation_service, get_integration_service, get_messaging_service
-from app.api.routes import conversation, health, integration, messaging
+from app.api.dependencies import get_conversation_service, get_integration_service, get_messaging_service, get_voice_service
+from app.api.routes import conversation, health, integration, messaging, voice
 from app.core.config import settings
 from app.services.conversation_service import ConversationService
 from app.services.integration_service import IntegrationService
 from app.services.messaging_service import MessagingService
 from app.services.nlp_service import NLPService
+from app.services.voice_service import VoiceService
 from app.services.repository_service import repository_service
 
 
@@ -36,6 +37,7 @@ async def lifespan(app: FastAPI):
     app.dependency_overrides[ConversationService] = get_conversation_service
     app.dependency_overrides[IntegrationService] = get_integration_service
     app.dependency_overrides[MessagingService] = get_messaging_service
+    app.dependency_overrides[VoiceService] = get_voice_service
     app.dependency_overrides[NLPService] = get_nlp_service
 
     yield
@@ -76,6 +78,7 @@ app.include_router(health.router, prefix="/health", tags=["health"])
 app.include_router(conversation.router, prefix="/api/v1/conversation", tags=["conversation"])
 app.include_router(integration.router, prefix="/api/v1/integration", tags=["integration"])
 app.include_router(messaging.router, tags=["messaging"])
+app.include_router(voice.router, prefix="/api/v1", tags=["voice"])
 
 @app.get("/")
 async def root() -> dict[str, str]:

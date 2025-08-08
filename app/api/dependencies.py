@@ -2,10 +2,12 @@
 from app.api.controllers.conversation_controller import ConversationController
 from app.api.controllers.integration_controller import IntegrationController
 from app.api.controllers.messaging_controller import MessagingController
+from app.api.controllers.voice_controller import VoiceController
 from app.services.conversation_service import ConversationService
 from app.services.integration_service import IntegrationService
 from app.services.messaging_service import MessagingService
 from app.services.nlp_service import NLPService
+from app.services.voice_service import VoiceService
 from app.services.repository_service import repository_service
 
 
@@ -61,4 +63,20 @@ def get_messaging_controller() -> MessagingController:
     """Get messaging controller instance with service dependencies."""
     return MessagingController(
         messaging_service=get_messaging_service()
+    )
+
+
+def get_voice_service() -> VoiceService:
+    """Get voice service instance with repository dependencies."""
+    if not repository_service.available:
+        raise RuntimeError("Repository service not available")
+    
+    service_factory = repository_service.get_service_factory()
+    return service_factory.create_voice_service()
+
+
+def get_voice_controller() -> VoiceController:
+    """Get voice controller instance with service dependencies."""
+    return VoiceController(
+        voice_service=get_voice_service()
     )

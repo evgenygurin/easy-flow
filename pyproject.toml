@@ -64,6 +64,14 @@ dependencies = [
     # Monitoring
     "aioprometheus>=22.3.0",
 
+    # Voice Assistant Integration
+    # For Yandex Alice webhook signature verification
+    "pycryptodome>=3.19.0",
+    
+    # For future voice integrations
+    # "ask-sdk-core>=1.19.0",  # Amazon Alexa (uncomment when implementing)
+    # "google-cloud-dialogflow>=2.25.0",  # Google Assistant (uncomment when implementing)
+    
     "types-redis>=4.6.0.20241004",
 
 ]

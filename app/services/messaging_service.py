@@ -16,9 +16,9 @@ from app.models.messaging import (
     DeliveryResult,
     WebhookEvent,
     ConversationContext,
-    MessageStats,
     PlatformConfig
 )
+from app.adapters.messaging.base import MessageStats
 from app.repositories.interfaces.integration_repository import IntegrationRepository
 
 
